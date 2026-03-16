@@ -1,0 +1,47 @@
+# Competitor platform definitions.
+# Each platform has URL patterns, rate-limit settings, and scraper hints.
+
+platforms:
+  doordash:
+    display_name: "DoorDash"
+    base_url: "https://www.doordash.com"
+    listing_url_pattern: "https://www.doordash.com/food-delivery/{slug}-restaurants/"
+    detail_url_pattern: "https://www.doordash.com/store/{store_id}/"
+    rate_limit:
+      requests_per_second: 2
+      delay_range_ms: [1500, 4000]   # Random delay between requests
+    scraper_type: "playwright"        # Needs JS rendering
+    requires_geo: true                # Uses geolocation headers
+
+  grubhub:
+    display_name: "Grubhub"
+    base_url: "https://www.grubhub.com"
+    listing_url_pattern: "https://www.grubhub.com/delivery/{slug}"
+    detail_url_pattern: "https://www.grubhub.com/restaurant/{restaurant_slug}/{restaurant_id}"
+    rate_limit:
+      requests_per_second: 3
+      delay_range_ms: [1000, 3000]
+    scraper_type: "playwright"
+    requires_geo: false
+
+  ubereats:
+    display_name: "Uber Eats"
+    base_url: "https://www.ubereats.com"
+    listing_url_pattern: "https://www.ubereats.com/city/{slug}"
+    detail_url_pattern: "https://www.ubereats.com/store/{store_id}"
+    rate_limit:
+      requests_per_second: 2
+      delay_range_ms: [2000, 5000]
+    scraper_type: "playwright"
+    requires_geo: true
+
+  justeattakeaway:
+    display_name: "Just Eat Takeaway"
+    base_url: "https://www.thuisbezorgd.nl" # Using NL brand for Amsterdam
+    listing_url_pattern: "https://www.thuisbezorgd.nl/en/delivery/food/{slug}"
+    detail_url_pattern: "https://www.thuisbezorgd.nl/en/menu/{store_id}"
+    rate_limit:
+      requests_per_second: 2
+      delay_range_ms: [1000, 3000]
+    scraper_type: "playwright"
+    requires_geo: false

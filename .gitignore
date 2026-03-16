@@ -1,0 +1,37 @@
+# ScrapingUber — Food Delivery Scraper
+
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Local scrape output
+local_storage/
+
+# Virtual environments
+.venv/
+venv/
+
+# Docker volumes
+pgdata/
+miniodata/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Binary media (kept in docs/ only)
+*.webp
+
+# Jupyter
+*.ipynb

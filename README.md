@@ -9,10 +9,11 @@ A production-grade web scraping pipeline that collects restaurant listings from 
 ### Live headed scraping
 
 The scraper uses a Playwright-controlled Chromium browser. When run locally, the browser is visible — here it is scraping UberEats Amsterdam in real time, extracting 1,000+ merchant listings per run.
+
 <video src="docs/demo_scraping.webm" width="100%" controls autoplay loop muted></video>
 ### Airflow, Grafana, MinIO, Prometheus
-
 A walkthrough of the full infrastructure: Airflow DAG scheduling per platform, the Grafana merchant coverage dashboard, MinIO object storage buckets, and Prometheus service health monitoring.
+
 <video src="docs/demo_services.webm" width="100%" controls autoplay loop muted></video>
 ---
 

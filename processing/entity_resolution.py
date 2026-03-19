@@ -25,6 +25,7 @@ FUZZ_THRESHOLD = 80  # Min rapidfuzz ratio (0–100) for each field to match
 @dataclass
 class MatchCandidate:
     """A potential match between two platform merchant records."""
+
     platform_merchant_id_a: int
     platform_merchant_id_b: int
     name_a: str
@@ -39,6 +40,7 @@ class MatchCandidate:
 @dataclass
 class ExtractedFields:
     """Parsed fields from a merchant record."""
+
     name: str
     street_number: str
     street_name: str
@@ -100,7 +102,9 @@ def extract_address_fields(address: str) -> ExtractedFields:
     if num_match:
         street_number = num_match.group(1).lower()
         street_name = (
-            before_postal[: num_match.start()].strip() + " " + before_postal[num_match.end() :].strip()
+            before_postal[: num_match.start()].strip()
+            + " "
+            + before_postal[num_match.end() :].strip()
         ).strip()
     else:
         street_name = before_postal
@@ -121,6 +125,45 @@ def _fuzz_score(a: str, b: str) -> int:
     if not a or not b:
         return 0
     return max(fuzz.ratio(a, b), fuzz.token_set_ratio(a, b))
+
+
+def compute_name_similarity(name_a: str, name_b: str) -> float:
+    """Return 0–1 similarity between two restaurant names (case-insensitive)."""
+    return _fuzz_score(_normalize(name_a or ""), _normalize(name_b or "")) / 100.0
+
+
+def compute_geo_distance(
+    lat1: float | None,
+    lng1: float | None,
+    lat2: float | None,
+    lng2: float | None,
+) -> float | None:
+    """Return distance in meters, or None if any coord is missing."""
+    if lat1 is None or lng1 is None or lat2 is None or lng2 is None:
+        return None
+    from haversine import haversine
+
+    return haversine((lat1, lng1), (lat2, lng2), unit="m")
+
+
+def _score_match(
+    name_sim: float,
+    geo_dist: float | None,
+    address_match: bool,
+) -> float:
+    """
+    Combine name similarity, geo distance, and address match into a 0–1 score.
+    Perfect match (name=1, geo=0, address=True) → 1.0.
+    Geo distance applies a penalty; closer = higher score.
+    """
+    score = name_sim
+    if address_match and name_sim >= 0.9:
+        score = min(1.0, score + 0.1)
+    if geo_dist is not None:
+        # Penalty: ~5% at 50m, ~25% at 200m, cap at 50%
+        penalty = min(geo_dist / 400.0, 0.5)
+        score = score * (1.0 - penalty)
+    return min(1.0, max(0.0, score))
 
 
 # ── Matching ────────────────────────────────────────────────────────
@@ -252,6 +295,7 @@ def add_row_confidence_to_target(
     that row and the target row. Target row gets 1.0. Rows from the same
     platform as target get 0.0 (not compared).
     """
+
     def extract_row(row) -> ExtractedFields:
         name = extract_restaurant_name(str(_row_val(row, "name") or ""))
         addr = extract_address_fields(str(_row_val(row, "address") or ""))
@@ -390,10 +434,7 @@ def run_resolve_entities() -> None:
         total_in_clusters,
     )
 
-    match_lookup = {
-        (m.platform_merchant_id_a, m.platform_merchant_id_b): m
-        for m in matches
-    }
+    match_lookup = {(m.platform_merchant_id_a, m.platform_merchant_id_b): m for m in matches}
 
     for entity_root, member_ids in clusters.items():
         members = df[df["id"].isin(member_ids)]

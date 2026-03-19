@@ -36,13 +36,16 @@ class GrubhubDetailScraper(BaseScraper):
                 listing.menu_items = menu_items
                 logger.info(
                     "[Grubhub] Extracted %d menu items for '%s'",
-                    len(menu_items), listing.name,
+                    len(menu_items),
+                    listing.name,
                 )
 
         except Exception as exc:
             logger.error(
                 "[Grubhub] Detail scrape failed for '%s' (%s): %s",
-                listing.name, listing.platform_merchant_id, exc,
+                listing.name,
+                listing.platform_merchant_id,
+                exc,
             )
 
         return listing

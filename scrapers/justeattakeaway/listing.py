@@ -90,9 +90,7 @@ class JustEatTakeawayListingScraper(BaseScraper):
                 # Scroll down a few times to load more restaurants
                 previous_count = 0
                 for scroll_round in range(5):
-                    await human_like_scroll(
-                        page, scroll_count=50
-                    )
+                    await human_like_scroll(page, scroll_count=50)
                     await page.wait_for_timeout(2000)
 
                     html = await page.content()
@@ -122,9 +120,7 @@ class JustEatTakeawayListingScraper(BaseScraper):
         except Exception as exc:
             logger.error("[JustEat] Listing scrape failed for %s: %s", self.market, exc)
 
-        logger.info(
-            "[JustEat/%s] Total listings extracted: %d", self.market, len(all_listings)
-        )
+        logger.info("[JustEat/%s] Total listings extracted: %d", self.market, len(all_listings))
         return all_listings
 
     async def scrape_detail(self, listing: MerchantListing) -> MerchantListing:
@@ -153,14 +149,10 @@ class JustEatTakeawayListingScraper(BaseScraper):
                 if detail_data.get("lng"):
                     listing.lng = detail_data["lng"]
 
-                logger.info(
-                    "[JustEat] Detail scraped for %s: %s", listing.name, listing.address
-                )
+                logger.info("[JustEat] Detail scraped for %s: %s", listing.name, listing.address)
             finally:
                 await page.close()
         except Exception as e:
-            logger.warning(
-                "[JustEat] Failed to scrape detail for %s: %s", listing.name, e
-            )
+            logger.warning("[JustEat] Failed to scrape detail for %s: %s", listing.name, e)
 
         return listing

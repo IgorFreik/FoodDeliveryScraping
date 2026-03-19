@@ -92,10 +92,12 @@ async def apply_stealth(context: BrowserContext) -> None:
     """
     # Randomize User-Agent
     ua = random.choice(_USER_AGENTS)
-    await context.set_extra_http_headers({
-        "User-Agent": ua,
-        "Accept-Language": "en-US,en;q=0.9",
-    })
+    await context.set_extra_http_headers(
+        {
+            "User-Agent": ua,
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+    )
 
     # Inject stealth JS into every new page
     await context.add_init_script(_STEALTH_JS)

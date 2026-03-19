@@ -81,9 +81,7 @@ class BaseScraper(ABC):
         browser_url = get_browser_url()
         if browser_url:
             logger.info("[%s] Connecting to Bright Data CDP...", self.PLATFORM)
-            self._browser = await self._playwright.chromium.connect_over_cdp(
-                browser_url
-            )
+            self._browser = await self._playwright.chromium.connect_over_cdp(browser_url)
             self._context = (
                 self._browser.contexts[0]
                 if self._browser.contexts
@@ -129,9 +127,7 @@ class BaseScraper(ABC):
                 return self._reusable_page
             except Exception as e:
                 if attempt == 0:
-                    logger.warning(
-                        "[%s] Browser context lost, restarting...", self.PLATFORM
-                    )
+                    logger.warning("[%s] Browser context lost, restarting...", self.PLATFORM)
                     await self._setup_browser()
                 else:
                     raise e
@@ -172,9 +168,7 @@ class BaseScraper(ABC):
                 await self._rate_limit()
                 page: Page = await self._context.new_page()
                 try:
-                    response = await page.goto(
-                        url, wait_until="domcontentloaded", timeout=30_000
-                    )
+                    response = await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
 
                     if response and response.status >= 400:
                         raise RuntimeError(f"HTTP {response.status} for {url}")
@@ -200,9 +194,7 @@ class BaseScraper(ABC):
                 )
                 await asyncio.sleep(wait)
 
-        raise RuntimeError(
-            f"All {self.max_retries} attempts failed for {url}"
-        ) from last_exc
+        raise RuntimeError(f"All {self.max_retries} attempts failed for {url}") from last_exc
 
     # ── Archival ────────────────────────────────────────────────────
 
@@ -247,9 +239,7 @@ class BaseScraper(ABC):
     async def run(self) -> list[MerchantListing]:
         """Full scrape: listings → details for each merchant."""
         listings = await self.scrape_listings()
-        logger.info(
-            "[%s/%s] Found %d listings.", self.PLATFORM, self.market, len(listings)
-        )
+        logger.info("[%s/%s] Found %d listings.", self.PLATFORM, self.market, len(listings))
 
         enriched: list[MerchantListing] = []
         for listing in listings:

@@ -78,7 +78,8 @@ class DoorDashListingScraper(BaseScraper):
 
                     logger.info(
                         "[DoorDash] Scroll round %d: %d merchants found",
-                        scroll_round + 1, current_count,
+                        scroll_round + 1,
+                        current_count,
                     )
 
                     if current_count == previous_count:
@@ -113,13 +114,15 @@ class DoorDashListingScraper(BaseScraper):
             self._archive_html(listing.platform_merchant_id, html)
 
             from processing.parser import parse_menu_items_from_html
+
             menu_items = parse_menu_items_from_html(html)
             listing.menu_items = menu_items
 
         except Exception as exc:
             logger.warning(
                 "[DoorDash] Detail scrape failed for %s: %s",
-                listing.name, exc,
+                listing.name,
+                exc,
             )
 
         return listing

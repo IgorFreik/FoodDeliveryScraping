@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from processing.parser import parse_listing, parse_ubereats_listing
 
-
 # ── Fixtures ─────────────────────────────────────────────────────────
 
 

@@ -33,9 +33,7 @@ class UberEatsListingScraper(BaseScraper):
         # Load market config for ZIP codes/coordinates
         with open(CONFIG_DIR / "markets.yaml") as f:
             markets_data = yaml.safe_load(f)["markets"]
-            self._market_config = next(
-                (m for m in markets_data if m["slug"] == market), {}
-            )
+            self._market_config = next((m for m in markets_data if m["slug"] == market), {})
 
         super().__init__(
             market,
@@ -142,9 +140,7 @@ class UberEatsListingScraper(BaseScraper):
             # Sometimes a "Delivery details" modal pops up covering the screen.
             # Click "Done" to dismiss it.
             try:
-                done_btn = await page.query_selector(
-                    'button[data-testid="done-button"]'
-                )
+                done_btn = await page.query_selector('button[data-testid="done-button"]')
                 if done_btn and await done_btn.is_visible():
                     await done_btn.click()
                     await page.wait_for_timeout(2000)
@@ -155,9 +151,7 @@ class UberEatsListingScraper(BaseScraper):
 
     async def scrape_listings(self) -> list[MerchantListing]:
         base_url = self._build_listing_url()
-        logger.info(
-            "[UberEats] Scraping listings for market '%s': %s", self.market, base_url
-        )
+        logger.info("[UberEats] Scraping listings for market '%s': %s", self.market, base_url)
 
         all_listings: list[MerchantListing] = []
         seen_ids: set[str] = set()
@@ -179,9 +173,7 @@ class UberEatsListingScraper(BaseScraper):
                     page_listings = parse_listing(html, self.PLATFORM, self.market)
 
                     new_merchants = [
-                        m
-                        for m in page_listings
-                        if m.platform_merchant_id not in seen_ids
+                        m for m in page_listings if m.platform_merchant_id not in seen_ids
                     ]
 
                     logger.info(
@@ -195,9 +187,7 @@ class UberEatsListingScraper(BaseScraper):
                     if new_merchants:
                         all_listings.extend(new_merchants)
                         seen_ids.update(m.platform_merchant_id for m in new_merchants)
-                        self._archive_html(
-                            f"listing_{self.market}_page{page_num}", html
-                        )
+                        self._archive_html(f"listing_{self.market}_page{page_num}", html)
 
                     # No new merchants = we've exhausted pagination
                     if not new_merchants and page_num > 1:
@@ -212,16 +202,12 @@ class UberEatsListingScraper(BaseScraper):
                     navigated = False
 
                     # Scroll to bottom to reveal pagination
-                    await page.evaluate(
-                        "window.scrollTo(0, document.body.scrollHeight)"
-                    )
+                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     await page.wait_for_timeout(1000)
 
                     # Click the numbered page link (most reliable method)
                     try:
-                        page_links = await page.locator(
-                            f'a[href*="page={next_page}"]'
-                        ).all()
+                        page_links = await page.locator(f'a[href*="page={next_page}"]').all()
                         if page_links:
                             await page_links[0].click()
                             await page.wait_for_timeout(4000)
@@ -240,13 +226,9 @@ class UberEatsListingScraper(BaseScraper):
                 await page.close()
 
         except Exception as exc:
-            logger.error(
-                "[UberEats] Listing scrape failed for %s: %s", self.market, exc
-            )
+            logger.error("[UberEats] Listing scrape failed for %s: %s", self.market, exc)
 
-        logger.info(
-            "[UberEats/%s] Total listings extracted: %d", self.market, len(all_listings)
-        )
+        logger.info("[UberEats/%s] Total listings extracted: %d", self.market, len(all_listings))
         return all_listings
 
     async def scrape_detail(self, listing: MerchantListing) -> MerchantListing:
@@ -302,12 +284,8 @@ class UberEatsListingScraper(BaseScraper):
 
             except Exception as e:
                 last_exc = e
-                logger.warning(
-                    "[UberEats] Attempt %d failed for %s: %s", attempt, listing.name, e
-                )
+                logger.warning("[UberEats] Attempt %d failed for %s: %s", attempt, listing.name, e)
                 await asyncio.sleep(2 * attempt)
 
-        logger.error(
-            "[UberEats] All attempts failed for %s: %s", listing.name, last_exc
-        )
+        logger.error("[UberEats] All attempts failed for %s: %s", listing.name, last_exc)
         return listing

@@ -8,7 +8,6 @@ import json
 
 from processing.parser import parse_justeattakeaway_listing, parse_listing
 
-
 # ── Helper Fixtures ───────────────────────────────────────────────────
 
 
@@ -29,22 +28,24 @@ def _wrap_react_query_restaurant_data(restaurant_data: dict[str, dict]) -> str:
 
 class TestJustEatTakeawayParser:
     def test_parse_from_restaurant_data_next_data(self):
-        html = _wrap_next_data_restaurant_data({
-            "abc123": {
-                "name": "Pizza Palace",
-                "uniqueName": "pizza-palace",
-                "primarySlug": "pizza-palace",
-                "address": {
-                    "firstLine": "Overtoom 123",
-                    "postalCode": "1054 HG",
-                    "city": "Amsterdam",
-                    "location": {
-                        "coordinates": [4.87, 52.36],
+        html = _wrap_next_data_restaurant_data(
+            {
+                "abc123": {
+                    "name": "Pizza Palace",
+                    "uniqueName": "pizza-palace",
+                    "primarySlug": "pizza-palace",
+                    "address": {
+                        "firstLine": "Overtoom 123",
+                        "postalCode": "1054 HG",
+                        "city": "Amsterdam",
+                        "location": {
+                            "coordinates": [4.87, 52.36],
+                        },
                     },
+                    "rating": {"score": 4.5, "count": 120},
                 },
-                "rating": {"score": 4.5, "count": 120},
-            },
-        })
+            }
+        )
         results = parse_justeattakeaway_listing(html, "amsterdam")
         assert len(results) == 1
         m = results[0]
@@ -60,19 +61,21 @@ class TestJustEatTakeawayParser:
         assert "thuisbezorgd.nl" in (m.raw_url or "")
 
     def test_parse_from_react_query_state(self):
-        html = _wrap_react_query_restaurant_data({
-            "xyz789": {
-                "name": "Sushi Bar",
-                "uniqueName": "sushi-bar",
-                "address": {
-                    "firstLine": "Leidseplein 5",
-                    "postalCode": "1017",
-                    "city": "Amsterdam",
-                    "location": {"coordinates": [4.88, 52.37]},
+        html = _wrap_react_query_restaurant_data(
+            {
+                "xyz789": {
+                    "name": "Sushi Bar",
+                    "uniqueName": "sushi-bar",
+                    "address": {
+                        "firstLine": "Leidseplein 5",
+                        "postalCode": "1017",
+                        "city": "Amsterdam",
+                        "location": {"coordinates": [4.88, 52.37]},
+                    },
+                    "rating": {"score": 4.2, "count": 85},
                 },
-                "rating": {"score": 4.2, "count": 85},
-            },
-        })
+            }
+        )
         results = parse_justeattakeaway_listing(html, "amsterdam")
         assert len(results) == 1
         m = results[0]
@@ -85,10 +88,23 @@ class TestJustEatTakeawayParser:
         assert results == []
 
     def test_parse_multiple_restaurants(self):
-        html = _wrap_next_data_restaurant_data({
-            "r1": {"name": "Restaurant A", "uniqueName": "a", "address": {"firstLine": "Street 1", "location": {"coordinates": [4.9, 52.35]}}},
-            "r2": {"name": "Restaurant B", "uniqueName": "b", "address": {"firstLine": "Street 2", "location": {"coordinates": [4.91, 52.36]}}},
-        })
+        html = _wrap_next_data_restaurant_data(
+            {
+                "r1": {
+                    "name": "Restaurant A",
+                    "uniqueName": "a",
+                    "address": {"firstLine": "Street 1", "location": {"coordinates": [4.9, 52.35]}},
+                },
+                "r2": {
+                    "name": "Restaurant B",
+                    "uniqueName": "b",
+                    "address": {
+                        "firstLine": "Street 2",
+                        "location": {"coordinates": [4.91, 52.36]},
+                    },
+                },
+            }
+        )
         results = parse_justeattakeaway_listing(html, "amsterdam")
         assert len(results) == 2
         names = {m.name for m in results}
@@ -96,9 +112,15 @@ class TestJustEatTakeawayParser:
         assert "Restaurant B" in names
 
     def test_parse_via_dispatcher(self):
-        html = _wrap_next_data_restaurant_data({
-            "disp123": {"name": "Dispatcher Test", "uniqueName": "disp", "address": {"firstLine": "Test 1", "location": {"coordinates": [4.9, 52.35]}}},
-        })
+        html = _wrap_next_data_restaurant_data(
+            {
+                "disp123": {
+                    "name": "Dispatcher Test",
+                    "uniqueName": "disp",
+                    "address": {"firstLine": "Test 1", "location": {"coordinates": [4.9, 52.35]}},
+                },
+            }
+        )
         results = parse_listing(html, "justeattakeaway", "amsterdam")
         assert len(results) == 1
         assert results[0].platform == "justeattakeaway"

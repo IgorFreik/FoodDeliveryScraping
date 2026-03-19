@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 from analytics.data_quality import get_dq_metrics
 
 
-@patch('analytics.data_quality.get_session')
+@patch("analytics.data_quality.get_session")
 def test_get_dq_metrics_empty(mock_get_session):
     mock_session = MagicMock()
     # Mock total count returning 0
@@ -15,7 +15,8 @@ def test_get_dq_metrics_empty(mock_get_session):
     assert metrics["total_merchants"] == 0
     assert metrics["overall_health"] == 0.0
 
-@patch('analytics.data_quality.get_session')
+
+@patch("analytics.data_quality.get_session")
 def test_get_dq_metrics_perfect_health(mock_get_session):
     mock_session = MagicMock()
     # return values for the 4 queries in order: total, missing_addr, missing_cuis, stale, invalid_geom

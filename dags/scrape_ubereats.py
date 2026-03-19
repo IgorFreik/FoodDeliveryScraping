@@ -92,18 +92,15 @@ def _scrape_ubereats(market: str, **kwargs):
                 is_promoted=pm.is_promoted,
                 market=pm.market,
                 raw_url=pm.raw_url,
-                scraped_at=datetime.utcnow()
+                scraped_at=datetime.utcnow(),
             )
 
             update_dict = {
-                c.name: c
-                for c in stmt.excluded
-                if c.name not in ("id", "platform", "platform_id")
+                c.name: c for c in stmt.excluded if c.name not in ("id", "platform", "platform_id")
             }
 
             do_update_stmt = stmt.on_conflict_do_update(
-                constraint="platform_merchants_platform_platform_id_key",
-                set_=update_dict
+                constraint="platform_merchants_platform_platform_id_key", set_=update_dict
             ).returning(PlatformMerchant.id)
 
             result = session.execute(do_update_stmt)
@@ -159,7 +156,6 @@ with DAG(
     catchup=False,
     tags=["scraping", "ubereats"],
 ) as dag:
-
     import yaml
 
     config_path = Path(__file__).resolve().parents[1] / "config" / "markets.yaml"

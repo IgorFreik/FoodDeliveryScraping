@@ -35,3 +35,16 @@ Thumbs.db
 
 # Jupyter
 *.ipynb
+scripts/delete_empty_address_old.py
+scripts/delete_test_platform.py
+scripts/diagnose_completeness.py
+scripts/diagnose_empty_addresses.py
+scripts/diagnose_matching.py
+scripts/explore_jet.py
+scripts/jet_test.html
+scripts/reset_grafana_dashboards.sh
+scripts/run_local_justeattakeaway.py
+scripts/run_local_ubereats.py
+scripts/test_page_1_uber.html
+scripts/run_local_justeattakeaway.py
+scripts/run_local_ubereats.py

@@ -19,17 +19,34 @@ from processing.parser import parse_listing
 from storage.db import MenuItemRow, PlatformMerchant, get_session
 from storage.minio_client import download_raw_html, upload_parsed_json
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger("parser_consumer")
 
 KAFKA_TOPIC = "raw-html-scraped"
 GROUP_ID = "parser-consumer-group-1"
 
 # --- Data Quality Metrics ---
-DQ_MISSING_ADDRESS = Counter("dq_missing_address_total", "Number of scraped merchants missing an address", ["platform", "market"])
-DQ_MISSING_CUISINE = Counter("dq_missing_cuisine_total", "Number of scraped merchants missing cuisine tags", ["platform", "market"])
-DQ_INVALID_PRICE = Counter("dq_invalid_price_total", "Number of items with unparseable or negative prices", ["platform", "market"])
-DQ_MISSING_COORDS = Counter("dq_missing_coords_total", "Number of scraped merchants missing lat/lng", ["platform", "market"])
+DQ_MISSING_ADDRESS = Counter(
+    "dq_missing_address_total",
+    "Number of scraped merchants missing an address",
+    ["platform", "market"],
+)
+DQ_MISSING_CUISINE = Counter(
+    "dq_missing_cuisine_total",
+    "Number of scraped merchants missing cuisine tags",
+    ["platform", "market"],
+)
+DQ_INVALID_PRICE = Counter(
+    "dq_invalid_price_total",
+    "Number of items with unparseable or negative prices",
+    ["platform", "market"],
+)
+DQ_MISSING_COORDS = Counter(
+    "dq_missing_coords_total", "Number of scraped merchants missing lat/lng", ["platform", "market"]
+)
+
 
 def process_message(msg):
     try:
@@ -107,18 +124,15 @@ def process_message(msg):
                 market=pm.market,
                 raw_url=pm.raw_url,
                 raw_s3_key=pm.raw_s3_key,
-                scraped_at=pm.scraped_at
+                scraped_at=pm.scraped_at,
             )
 
             update_dict = {
-                c.name: c
-                for c in stmt.excluded
-                if c.name not in ('id', 'platform', 'platform_id')
+                c.name: c for c in stmt.excluded if c.name not in ("id", "platform", "platform_id")
             }
 
             do_update_stmt = stmt.on_conflict_do_update(
-                constraint='platform_merchants_platform_platform_id_key',
-                set_=update_dict
+                constraint="platform_merchants_platform_platform_id_key", set_=update_dict
             ).returning(PlatformMerchant.id)
 
             result = session.execute(do_update_stmt)
@@ -159,13 +173,14 @@ def process_message(msg):
     finally:
         session.close()
 
+
 def main():
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
     conf = {
-        'bootstrap.servers': bootstrap_servers,
-        'group.id': GROUP_ID,
-        'auto.offset.reset': 'earliest',
-        'enable.auto.commit': False
+        "bootstrap.servers": bootstrap_servers,
+        "group.id": GROUP_ID,
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": False,
     }
 
     consumer = Consumer(conf)
@@ -174,7 +189,9 @@ def main():
     logger.info("Starting Prometheus metrics server on port 8001")
     start_http_server(8001)
 
-    logger.info("Kafka consumer started. Listening on %s for topic %s", bootstrap_servers, KAFKA_TOPIC)
+    logger.info(
+        "Kafka consumer started. Listening on %s for topic %s", bootstrap_servers, KAFKA_TOPIC
+    )
 
     try:
         while True:
@@ -182,7 +199,10 @@ def main():
             if msg is None:
                 continue
             if msg.error():
-                if msg.error().code() in (KafkaError._PARTITION_EOF, KafkaError.UNKNOWN_TOPIC_OR_PART):
+                if msg.error().code() in (
+                    KafkaError._PARTITION_EOF,
+                    KafkaError.UNKNOWN_TOPIC_OR_PART,
+                ):
                     continue
                 else:
                     logger.error("Consumer error: %s", msg.error())
@@ -196,6 +216,7 @@ def main():
     finally:
         consumer.close()
         logger.info("Consumer closed.")
+
 
 if __name__ == "__main__":
     main()

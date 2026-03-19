@@ -49,11 +49,10 @@ Base = declarative_base()
 
 # ── Models ──────────────────────────────────────────────────────────
 
+
 class PlatformMerchant(Base):
     __tablename__ = "platform_merchants"
-    __table_args__ = (
-        UniqueConstraint("platform", "platform_id", name="uq_platform_merchant"),
-    )
+    __table_args__ = (UniqueConstraint("platform", "platform_id", name="uq_platform_merchant"),)
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     platform = Column(String, nullable=False)
@@ -73,7 +72,9 @@ class PlatformMerchant(Base):
     raw_s3_key = Column(Text)
     raw_url = Column(Text)
 
-    menu_items = relationship("MenuItemRow", back_populates="merchant", cascade="all, delete-orphan")
+    menu_items = relationship(
+        "MenuItemRow", back_populates="merchant", cascade="all, delete-orphan"
+    )
     match = relationship("MerchantMatch", back_populates="platform_merchant", uselist=False)
 
 
@@ -98,9 +99,7 @@ class MerchantMatch(Base):
     platform_merchant_id = Column(
         BigInteger, ForeignKey("platform_merchants.id", ondelete="CASCADE"), primary_key=True
     )
-    merchant_id = Column(
-        BigInteger, ForeignKey("merchants.id", ondelete="CASCADE"), nullable=False
-    )
+    merchant_id = Column(BigInteger, ForeignKey("merchants.id", ondelete="CASCADE"), nullable=False)
     confidence = Column(Numeric(4, 3))
     match_method = Column(String)
     matched_at = Column(DateTime(timezone=True), default=datetime.utcnow)

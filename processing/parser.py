@@ -46,7 +46,11 @@ def _parse_ld_json(soup: BeautifulSoup) -> dict[str, Any]:
                 data = data[0] if data else {}
 
             # Look for Restaurant or FoodEstablishment
-            if isinstance(data, dict) and data.get("@type") in ["Restaurant", "FoodEstablishment", "Store"]:
+            if isinstance(data, dict) and data.get("@type") in [
+                "Restaurant",
+                "FoodEstablishment",
+                "Store",
+            ]:
                 # Address
                 addr = data.get("address", {})
                 if isinstance(addr, dict):
@@ -102,12 +106,15 @@ def _load_encoded_json(text: str) -> Any:
             # Try to unescape unicode characters manually if needed
             # but usually json.loads handles \u0022 fine if it's a real string.
             # If it's a "string of a string", we might need multiple passes.
-            cleaned = text.encode().decode('unicode_escape')
+            cleaned = text.encode().decode("unicode_escape")
             return json.loads(cleaned)
         except Exception:
             return None
 
-def find_in_json(obj, target_val, keys=["uuid", "storeUUID", "id", "slug", "storeSlug", "platform_id"]):
+
+def find_in_json(
+    obj, target_val, keys=["uuid", "storeUUID", "id", "slug", "storeSlug", "platform_id"]
+):
     """Recursively search for an object that has any of the target keys matching target_val."""
     if isinstance(obj, str) and (obj.startswith("{") or obj.startswith("[")):
         try:
@@ -163,20 +170,32 @@ def parse_doordash_listing(html: str, market: str) -> list[MerchantListing]:
             pass
 
     for s in stores:
-        merchants.append(MerchantListing(
-            platform="doordash",
-            platform_merchant_id=str(s.get("id", s.get("storeId", ""))),
-            name=s.get("name", ""),
-            address=s.get("address", {}).get("formattedAddress", "") if isinstance(s.get("address"), dict) else str(s.get("address", "")),
-            lat=_safe_float(s.get("address", {}).get("lat") if isinstance(s.get("address"), dict) else None),
-            lng=_safe_float(s.get("address", {}).get("lng") if isinstance(s.get("address"), dict) else None),
-            cuisine_tags=[t.get("name") for t in s.get("tags", []) if isinstance(t, dict) and t.get("name")],
-            rating=_safe_float(s.get("averageRating")),
-            review_count=_safe_int(s.get("numRatings")),
-            delivery_fee=_safe_float(s.get("deliveryFee")),
-            market=market,
-            raw_url=f"https://www.doordash.com/store/{s.get('id', '')}/",
-        ))
+        merchants.append(
+            MerchantListing(
+                platform="doordash",
+                platform_merchant_id=str(s.get("id", s.get("storeId", ""))),
+                name=s.get("name", ""),
+                address=s.get("address", {}).get("formattedAddress", "")
+                if isinstance(s.get("address"), dict)
+                else str(s.get("address", "")),
+                lat=_safe_float(
+                    s.get("address", {}).get("lat") if isinstance(s.get("address"), dict) else None
+                ),
+                lng=_safe_float(
+                    s.get("address", {}).get("lng") if isinstance(s.get("address"), dict) else None
+                ),
+                cuisine_tags=[
+                    t.get("name")
+                    for t in s.get("tags", [])
+                    if isinstance(t, dict) and t.get("name")
+                ],
+                rating=_safe_float(s.get("averageRating")),
+                review_count=_safe_int(s.get("numRatings")),
+                delivery_fee=_safe_float(s.get("deliveryFee")),
+                market=market,
+                raw_url=f"https://www.doordash.com/store/{s.get('id', '')}/",
+            )
+        )
 
     if not merchants:
         cards = soup.select("[data-testid='StoreCard'], .store-card, article")
@@ -188,11 +207,15 @@ def parse_doordash_listing(html: str, market: str) -> list[MerchantListing]:
                 name = name_el.get_text(strip=True)
                 link = card.select_one("a[href]")
                 href = link["href"] if link else ""
-                merchants.append(MerchantListing(
-                    platform="doordash", platform_merchant_id=href.rstrip("/").split("/")[-1] if href else name,
-                    name=name, market=market,
-                    raw_url=f"https://www.doordash.com{href}" if href.startswith("/") else href,
-                ))
+                merchants.append(
+                    MerchantListing(
+                        platform="doordash",
+                        platform_merchant_id=href.rstrip("/").split("/")[-1] if href else name,
+                        name=name,
+                        market=market,
+                        raw_url=f"https://www.doordash.com{href}" if href.startswith("/") else href,
+                    )
+                )
             except Exception:
                 pass
     return merchants
@@ -207,6 +230,7 @@ def parse_grubhub_listing(html: str, market: str) -> list[MerchantListing]:
 
 
 # ── JustEatTakeaway Parser ─────────────────────────────────────────
+
 
 def parse_justeattakeaway_listing(html: str, market: str) -> list[MerchantListing]:
     merchants: list[MerchantListing] = []
@@ -268,7 +292,11 @@ def parse_justeattakeaway_listing(html: str, market: str) -> list[MerchantListin
                 # Fallback: generic find objects with name + location
                 def find_restaurants(obj: Any) -> list:
                     if isinstance(obj, dict):
-                        if "name" in obj and "location" in obj and isinstance(obj["location"], dict):
+                        if (
+                            "name" in obj
+                            and "location" in obj
+                            and isinstance(obj["location"], dict)
+                        ):
                             loc = obj["location"]
                             if "lat" in loc or "latitude" in loc:
                                 return [obj]
@@ -288,14 +316,22 @@ def parse_justeattakeaway_listing(html: str, market: str) -> list[MerchantListin
                     merchants.append(
                         MerchantListing(
                             platform="justeattakeaway",
-                            platform_merchant_id=str(s.get("id", s.get("primarySlug", s.get("name")))),
+                            platform_merchant_id=str(
+                                s.get("id", s.get("primarySlug", s.get("name")))
+                            ),
                             name=s.get("name", ""),
                             rating=_safe_float(s.get("rating", {}).get("score")),
                             review_count=_safe_int(s.get("rating", {}).get("count")),
                             market=market,
                             raw_url=f"https://www.thuisbezorgd.nl/en/menu/{s.get('primarySlug', s.get('id'))}",
-                            lat=_safe_float(s.get("location", {}).get("lat") or s.get("location", {}).get("latitude")),
-                            lng=_safe_float(s.get("location", {}).get("lng") or s.get("location", {}).get("longitude")),
+                            lat=_safe_float(
+                                s.get("location", {}).get("lat")
+                                or s.get("location", {}).get("latitude")
+                            ),
+                            lng=_safe_float(
+                                s.get("location", {}).get("lng")
+                                or s.get("location", {}).get("longitude")
+                            ),
                             address=s.get("address", {}).get("streetName", ""),
                         )
                     )
@@ -308,6 +344,7 @@ def parse_justeattakeaway_listing(html: str, market: str) -> list[MerchantListin
 
 
 # ── Uber Eats Parser ───────────────────────────────────────────────
+
 
 def parse_ubereats_listing(html: str, market: str) -> list[MerchantListing]:
     merchants: list[MerchantListing] = []
@@ -370,13 +407,17 @@ def parse_ubereats_listing(html: str, market: str) -> list[MerchantListing]:
                 continue
 
             rating, review_count = None, None
-            label_el = card.select_one('[aria-label*="Rating"], [aria-label*="Rated"], [aria-label*="Gewaardeerd"]')
+            label_el = card.select_one(
+                '[aria-label*="Rating"], [aria-label*="Rated"], [aria-label*="Gewaardeerd"]'
+            )
             if label_el:
                 label = label_el["aria-label"]
                 rmatch = re.search(r"(\d[.,]\d)", label)
                 if rmatch:
                     rating = _safe_float(rmatch.group(1).replace(",", "."))
-                cmatch = re.search(r"(\d+[\d\s,.]*)\s*(?:reviews|recensies|ratings|waarderingen)", label, re.I)
+                cmatch = re.search(
+                    r"(\d+[\d\s,.]*)\s*(?:reviews|recensies|ratings|waarderingen)", label, re.I
+                )
                 if cmatch:
                     review_count = _safe_int(re.sub(r"\D", "", cmatch.group(1)))
 
@@ -408,26 +449,32 @@ def parse_ubereats_listing(html: str, market: str) -> list[MerchantListing]:
                 start_idx = raw_state.find(store_id)
                 if start_idx != -1:
                     # Find coordinates in a 2000-char window around the store_id
-                    window = raw_state[max(0, start_idx-1000):start_idx+1000]
+                    window = raw_state[max(0, start_idx - 1000) : start_idx + 1000]
                     # Log snippet for debugging (internal only)
                     # logger.debug(f"[ubereats] Window for {store_id}: {window[:100]}...")
 
                     # Search for coordinates with various names and possible escaping
                     # Handles \u0022latitude\u0022: 52.3, "latitude": 52.3, etc.
-                    lat_match = re.search(r'(?:latitude|lat)["\u0022\\]*:\s*(-?\d+\.\d+)', window, re.I)
-                    lng_match = re.search(r'(?:longitude|lng)["\u0022\\]*:\s*(-?\d+\.\d+)', window, re.I)
+                    lat_match = re.search(
+                        r'(?:latitude|lat)["\u0022\\]*:\s*(-?\d+\.\d+)', window, re.I
+                    )
+                    lng_match = re.search(
+                        r'(?:longitude|lng)["\u0022\\]*:\s*(-?\d+\.\d+)', window, re.I
+                    )
 
                     if lat_match and lng_match:
                         lat = _safe_float(lat_match.group(1))
                         lng = _safe_float(lng_match.group(1))
                         if lat and lng:
-                            logger.info(f"[ubereats] Found coordinates via REGEX for {store_id}: {lat}, {lng}")
+                            logger.info(
+                                f"[ubereats] Found coordinates via REGEX for {store_id}: {lat}, {lng}"
+                            )
                             found_in_json = True
                             break
 
                 # If regex fails, try the standard JSON path (cleaned)
                 try:
-                    raw_text = stag.string.replace('\\u0022', '"').replace('\\"', '"')
+                    raw_text = stag.string.replace("\\u0022", '"').replace('\\"', '"')
                     if raw_text.startswith('"') and raw_text.endswith('"'):
                         raw_text = raw_text[1:-1]
                     data = json.loads(raw_text)
@@ -439,7 +486,9 @@ def parse_ubereats_listing(html: str, market: str) -> list[MerchantListing]:
                         if not address:
                             addr_obj = store_data.get("address")
                             if isinstance(addr_obj, dict):
-                                address = addr_obj.get("streetAddress") or addr_obj.get("formattedAddress", "")
+                                address = addr_obj.get("streetAddress") or addr_obj.get(
+                                    "formattedAddress", ""
+                                )
                             elif isinstance(addr_obj, str):
                                 address = addr_obj
                         if lat and lng:
@@ -450,14 +499,20 @@ def parse_ubereats_listing(html: str, market: str) -> list[MerchantListing]:
                 if found_in_json:
                     break
 
-            merchants.append(MerchantListing(
-                platform="ubereats",
-                platform_merchant_id=store_id,
-                name=name, market=market,
-                raw_url=f"https://www.ubereats.com{href}" if href.startswith("/") else href,
-                rating=rating, review_count=review_count,
-                lat=lat, lng=lng, address=address
-            ))
+            merchants.append(
+                MerchantListing(
+                    platform="ubereats",
+                    platform_merchant_id=store_id,
+                    name=name,
+                    market=market,
+                    raw_url=f"https://www.ubereats.com{href}" if href.startswith("/") else href,
+                    rating=rating,
+                    review_count=review_count,
+                    lat=lat,
+                    lng=lng,
+                    address=address,
+                )
+            )
             if lat and lng:
                 logger.info(f"[ubereats] Extracted coordinates for {store_id}: {lat}, {lng}")
 
@@ -485,6 +540,7 @@ LISTING_PARSERS = {
 
 # ── Detail Parsers ─────────────────────────────────────────────────
 
+
 def parse_ubereats_detail(html: str, market: str) -> dict[str, Any]:
     """Parse Uber Eats detail page for extra info like address."""
     soup = BeautifulSoup(html, "html.parser")
@@ -499,7 +555,7 @@ def parse_ubereats_detail(html: str, market: str) -> dict[str, Any]:
             continue
         try:
             # Aggressive unescaping as learned from listing parser
-            raw_text = stag.string.replace('\\u0022', '"').replace('\\"', '"')
+            raw_text = stag.string.replace("\\u0022", '"').replace('\\"', '"')
             if raw_text.startswith('"') and raw_text.endswith('"'):
                 raw_text = raw_text[1:-1]
             data = json.loads(raw_text)
@@ -509,7 +565,9 @@ def parse_ubereats_detail(html: str, market: str) -> dict[str, Any]:
             # Since we are on a detail page, we just look for the first one that fits
             def find_address_in_obj(obj):
                 if isinstance(obj, dict):
-                    if "streetAddress" in obj or ("address" in obj and isinstance(obj["address"], dict)):
+                    if "streetAddress" in obj or (
+                        "address" in obj and isinstance(obj["address"], dict)
+                    ):
                         return obj
                     for v in obj.values():
                         found = find_address_in_obj(v)
@@ -543,7 +601,9 @@ def parse_ubereats_detail(html: str, market: str) -> dict[str, Any]:
     # Fallback to DOM
     if not res.get("address"):
         # Look for typical address containers
-        addr_el = soup.select_one("button[aria-label*='Address'], button[aria-label*='Adres'], [data-testid='store-info-address']")
+        addr_el = soup.select_one(
+            "button[aria-label*='Address'], button[aria-label*='Adres'], [data-testid='store-info-address']"
+        )
         if addr_el:
             res["address"] = addr_el.get_text(separator=", ", strip=True)
         else:
@@ -560,6 +620,7 @@ def parse_ubereats_detail(html: str, market: str) -> dict[str, Any]:
 
     return res
 
+
 def parse_justeattakeaway_detail(html: str, market: str) -> dict[str, Any]:
     """Parse JET detail page for extra info like address."""
     soup = BeautifulSoup(html, "html.parser")
@@ -574,7 +635,9 @@ def parse_justeattakeaway_detail(html: str, market: str) -> dict[str, Any]:
             data = json.loads(stag.string)
             # Drill down into common Next.js state paths for JET
             props = data.get("props", {}).get("pageProps", {})
-            restaurant = props.get("restaurant") or props.get("initialState", {}).get("restaurant", {}).get("restaurant", {})
+            restaurant = props.get("restaurant") or props.get("initialState", {}).get(
+                "restaurant", {}
+            ).get("restaurant", {})
 
             if restaurant:
                 loc = restaurant.get("location", {})
@@ -597,7 +660,7 @@ def parse_justeattakeaway_detail(html: str, market: str) -> dict[str, Any]:
                 if parts:
                     res["address"] = ", ".join(parts)
                 else:
-                    res["address"] = street # Fallback
+                    res["address"] = street  # Fallback
 
                 res["lat"] = _safe_float(loc.get("lat") or loc.get("latitude"))
                 res["lng"] = _safe_float(loc.get("lng") or loc.get("longitude"))
@@ -606,7 +669,9 @@ def parse_justeattakeaway_detail(html: str, market: str) -> dict[str, Any]:
 
     # Fallback to DOM
     if not res.get("address"):
-        details = soup.select_one('[data-testid="business-details-content"], section:has(h2:contains("details"))')
+        details = soup.select_one(
+            '[data-testid="business-details-content"], section:has(h2:contains("details"))'
+        )
         if details:
             # Usually address is in the first few paragraphs
             ps = details.find_all("p")
@@ -615,6 +680,7 @@ def parse_justeattakeaway_detail(html: str, market: str) -> dict[str, Any]:
 
     return res
 
+
 def parse_detail(platform: str, html: str, market: str) -> dict[str, Any]:
     """Dispatch to the appropriate platform detail parser."""
     parser = DETAIL_PARSERS.get(platform)
@@ -622,6 +688,7 @@ def parse_detail(platform: str, html: str, market: str) -> dict[str, Any]:
         logger.error("No detail parser found for platform: %s", platform)
         return {}
     return parser(html, market)
+
 
 DETAIL_PARSERS = {
     "ubereats": parse_ubereats_detail,

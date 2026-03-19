@@ -43,7 +43,6 @@ with DAG(
     catchup=False,
     tags=["processing", "entity-resolution"],
 ) as dag:
-
     PythonOperator(
         task_id="resolve_entities",
         python_callable=_resolve_entities,

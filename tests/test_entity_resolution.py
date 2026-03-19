@@ -85,29 +85,83 @@ class TestScoreMatch:
 
 class TestRuleBasedMatch:
     def test_matches_across_platforms(self):
-        df = pd.DataFrame([
-            {"id": 1, "platform": "doordash", "name": "Joe's Pizza", "address": "123 Main St", "lat": 40.71, "lng": -74.00, "market": "nyc"},
-            {"id": 2, "platform": "grubhub", "name": "Joe's Famous Pizza", "address": "123 Main Street", "lat": 40.71, "lng": -74.00, "market": "nyc"},
-        ])
+        df = pd.DataFrame(
+            [
+                {
+                    "id": 1,
+                    "platform": "doordash",
+                    "name": "Joe's Pizza",
+                    "address": "123 Main St",
+                    "lat": 40.71,
+                    "lng": -74.00,
+                    "market": "nyc",
+                },
+                {
+                    "id": 2,
+                    "platform": "grubhub",
+                    "name": "Joe's Famous Pizza",
+                    "address": "123 Main Street",
+                    "lat": 40.71,
+                    "lng": -74.00,
+                    "market": "nyc",
+                },
+            ]
+        )
 
         matches = rule_based_match(df)
         assert len(matches) >= 1
         assert matches[0].name_similarity >= 0.7
 
     def test_no_match_different_markets(self):
-        df = pd.DataFrame([
-            {"id": 1, "platform": "doordash", "name": "Joe's Pizza", "address": "", "lat": None, "lng": None, "market": "nyc"},
-            {"id": 2, "platform": "grubhub", "name": "Joe's Pizza", "address": "", "lat": None, "lng": None, "market": "la"},
-        ])
+        df = pd.DataFrame(
+            [
+                {
+                    "id": 1,
+                    "platform": "doordash",
+                    "name": "Joe's Pizza",
+                    "address": "",
+                    "lat": None,
+                    "lng": None,
+                    "market": "nyc",
+                },
+                {
+                    "id": 2,
+                    "platform": "grubhub",
+                    "name": "Joe's Pizza",
+                    "address": "",
+                    "lat": None,
+                    "lng": None,
+                    "market": "la",
+                },
+            ]
+        )
 
         matches = rule_based_match(df)
         assert len(matches) == 0  # Different markets should not match
 
     def test_no_match_same_platform(self):
-        df = pd.DataFrame([
-            {"id": 1, "platform": "doordash", "name": "Joe's Pizza", "address": "", "lat": None, "lng": None, "market": "nyc"},
-            {"id": 2, "platform": "doordash", "name": "Joe's Pizza Copy", "address": "", "lat": None, "lng": None, "market": "nyc"},
-        ])
+        df = pd.DataFrame(
+            [
+                {
+                    "id": 1,
+                    "platform": "doordash",
+                    "name": "Joe's Pizza",
+                    "address": "",
+                    "lat": None,
+                    "lng": None,
+                    "market": "nyc",
+                },
+                {
+                    "id": 2,
+                    "platform": "doordash",
+                    "name": "Joe's Pizza Copy",
+                    "address": "",
+                    "lat": None,
+                    "lng": None,
+                    "market": "nyc",
+                },
+            ]
+        )
 
         matches = rule_based_match(df)
         assert len(matches) == 0  # Same platform should not match

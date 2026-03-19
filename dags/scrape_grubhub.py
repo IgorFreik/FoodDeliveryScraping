@@ -108,7 +108,6 @@ with DAG(
     catchup=False,
     tags=["scraping", "grubhub"],
 ) as dag:
-
     import yaml
 
     config_path = Path(__file__).resolve().parents[1] / "config" / "markets.yaml"

@@ -72,20 +72,26 @@ class TestSafeCoercion:
 
 class TestDoorDashParser:
     def test_parse_from_next_data(self):
-        html = _wrap_next_data([
-            {
-                "id": "12345",
-                "name": "Joe's Pizza",
-                "address": {"formattedAddress": "123 Main St, NYC", "lat": 40.71, "lng": -74.00},
-                "tags": [{"name": "Italian"}, {"name": "Pizza"}],
-                "averageRating": 4.5,
-                "numRatings": 200,
-                "priceRange": "$$",
-                "deliveryFee": 2.99,
-                "estimatedDeliveryTime": 30,
-                "isSponsored": False,
-            }
-        ])
+        html = _wrap_next_data(
+            [
+                {
+                    "id": "12345",
+                    "name": "Joe's Pizza",
+                    "address": {
+                        "formattedAddress": "123 Main St, NYC",
+                        "lat": 40.71,
+                        "lng": -74.00,
+                    },
+                    "tags": [{"name": "Italian"}, {"name": "Pizza"}],
+                    "averageRating": 4.5,
+                    "numRatings": 200,
+                    "priceRange": "$$",
+                    "deliveryFee": 2.99,
+                    "estimatedDeliveryTime": 30,
+                    "isSponsored": False,
+                }
+            ]
+        )
 
         results = parse_doordash_listing(html, "nyc")
 
@@ -125,23 +131,25 @@ class TestDoorDashParser:
 
 class TestGrubhubParser:
     def test_parse_from_json(self):
-        html = _wrap_grubhub_json([
-            {
-                "restaurant_id": "67890",
-                "name": "Taco Palace",
-                "address": {
-                    "street_address": "456 Oak Ave",
-                    "latitude": 34.05,
-                    "longitude": -118.24,
-                },
-                "cuisines": [{"name": "Mexican"}, {"name": "Tacos"}],
-                "rating": {"rating_value": 4.2, "rating_count": 150},
-                "price_rating": "$",
-                "delivery_fee": {"price": 1.99},
-                "delivery_time_estimate": 25,
-                "sponsored": False,
-            }
-        ])
+        html = _wrap_grubhub_json(
+            [
+                {
+                    "restaurant_id": "67890",
+                    "name": "Taco Palace",
+                    "address": {
+                        "street_address": "456 Oak Ave",
+                        "latitude": 34.05,
+                        "longitude": -118.24,
+                    },
+                    "cuisines": [{"name": "Mexican"}, {"name": "Tacos"}],
+                    "rating": {"rating_value": 4.2, "rating_count": 150},
+                    "price_rating": "$",
+                    "delivery_fee": {"price": 1.99},
+                    "delivery_time_estimate": 25,
+                    "sponsored": False,
+                }
+            ]
+        )
 
         results = parse_grubhub_listing(html, "la")
 
@@ -151,9 +159,6 @@ class TestGrubhubParser:
     def test_parse_empty_html(self):
         results = parse_grubhub_listing("<html></html>", "la")
         assert results == []
-
-
-
 
 
 # ── Dispatcher ──────────────────────────────────────────────────────

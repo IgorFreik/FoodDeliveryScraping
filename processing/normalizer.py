@@ -107,10 +107,25 @@ def normalize_listing(listing: MerchantListing) -> MerchantListing:
 
 # Common Amsterdam location suffixes used by Uber Eats
 _LOCATION_SUFFIXES = [
-    "amsterdam", "centrum", "oost", "west", "noord", "zuid",
-    "de pijp", "jordaan", "westerpark", "zuidas", "ndsm",
-    "diemen", "amstelveen", "badhoevedorp", "duivendrecht",
-    "ijburg", "zuidoost", "bijlmerplein", "osdorp",
+    "amsterdam",
+    "centrum",
+    "oost",
+    "west",
+    "noord",
+    "zuid",
+    "de pijp",
+    "jordaan",
+    "westerpark",
+    "zuidas",
+    "ndsm",
+    "diemen",
+    "amstelveen",
+    "badhoevedorp",
+    "duivendrecht",
+    "ijburg",
+    "zuidoost",
+    "bijlmerplein",
+    "osdorp",
 ]
 
 

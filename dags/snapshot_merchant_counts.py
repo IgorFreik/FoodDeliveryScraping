@@ -60,7 +60,6 @@ with DAG(
     catchup=False,
     tags=["analytics", "snapshot"],
 ) as dag:
-
     PythonOperator(
         task_id="snapshot_counts",
         python_callable=_snapshot_merchant_counts,

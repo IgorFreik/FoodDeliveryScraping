@@ -3,11 +3,14 @@ Pydantic v2 schemas for scraped merchant data.
 
 These models validate/coerce data coming out of the scrapers before it is
 persisted to PostgreSQL.
+
+Uses Optional[X] instead of X | None for Python 3.9 compatibility with Pydantic.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -16,9 +19,9 @@ class MenuItem(BaseModel):
     """A single item on a merchant's menu."""
 
     name: str
-    price: float | None = None
-    description: str | None = None
-    category: str | None = None
+    price: Optional[float] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
 
     @field_validator("price", mode="before")
     @classmethod
@@ -39,14 +42,14 @@ class MerchantListing(BaseModel):
     platform_merchant_id: str = Field(..., description="Platform-specific merchant ID")
     name: str
     address: str = ""
-    lat: float | None = None
-    lng: float | None = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     cuisine_tags: list[str] = Field(default_factory=list)
-    rating: float | None = None
-    review_count: int | None = None
-    price_bucket: str | None = None  # "$", "$$", "$$$", "$$$$"
-    delivery_fee: float | None = None
-    estimated_delivery_min: int | None = None
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+    price_bucket: Optional[str] = None  # "$", "$$", "$$$", "$$$$"
+    delivery_fee: Optional[float] = None
+    estimated_delivery_min: Optional[int] = None
     is_promoted: bool = False
     menu_items: list[MenuItem] = Field(default_factory=list)
     scraped_at: datetime = Field(default_factory=datetime.utcnow)
@@ -75,9 +78,9 @@ class CrawlResult(BaseModel):
     platform: str
     market: str
     started_at: datetime
-    finished_at: datetime | None = None
+    finished_at: Optional[datetime] = None
     status: str = "running"  # running | success | failed
     merchants_found: int = 0
     errors: int = 0
-    error_detail: str | None = None
+    error_detail: Optional[str] = None
     listings: list[MerchantListing] = Field(default_factory=list)

@@ -83,7 +83,7 @@ ignore = ["E501"]
 
 # Optional[X] required for Python 3.9 + Pydantic compatibility (X | None needs 3.10)
 [tool.ruff.lint.per-file-ignores]
-"processing/models.py" = ["UP007"]
+"processing/models.py" = ["UP007", "UP045"]
 
 [tool.ruff.format]
 quote-style = "double"

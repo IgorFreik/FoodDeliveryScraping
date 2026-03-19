@@ -53,13 +53,13 @@ def load_listings_from_minio(platform: str, market: str = "amsterdam") -> list:
 def listings_to_df(listings: list, start_id: int = 0) -> pd.DataFrame:
     """Convert MerchantListing list to DataFrame for rule_based_match."""
     rows = []
-    for i, L in enumerate(listings):
+    for i, listing in enumerate(listings):
         rows.append({
             "id": start_id + i,
-            "platform": L.platform,
-            "name": L.name or "",
-            "address": L.address or "",
-            "market": L.market,
+            "platform": listing.platform,
+            "name": listing.name or "",
+            "address": listing.address or "",
+            "market": listing.market,
         })
     return pd.DataFrame(rows)
 
@@ -76,11 +76,11 @@ def run_test(name: str, df: pd.DataFrame, target_row_index: int = 0):
     print(f"\n{'='*60}")
     print(f"TEST: {name}")
     print("=" * 60)
-    MAX_PRINTED_ROWS = 10
+    max_printed_rows = 10
     print("Input (rows sorted by similarity to target desc):")
     for i, (_, row) in enumerate(df_with_conf.iterrows()):
-        if i >= MAX_PRINTED_ROWS:
-            print(f"... (only showing first {MAX_PRINTED_ROWS} rows)")
+        if i >= max_printed_rows:
+            print(f"... (only showing first {max_printed_rows} rows)")
             break
         print(f"  [{row['platform']}] id={row['id']} conf={row['confidence']:.2f}: {row['name']!r} @ {row['address']!r}")
     print()

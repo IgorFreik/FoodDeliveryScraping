@@ -3,18 +3,18 @@ import logging
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import pandas as pd
-from sqlalchemy import text
+import pandas as pd  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
-from analytics.coverage_report import generate_coverage_report, print_report
-from processing.entity_resolution import (
+from analytics.coverage_report import generate_coverage_report, print_report  # noqa: E402
+from processing.entity_resolution import (  # noqa: E402
     merge_matches_to_entities,
     rule_based_match,
 )
-from storage.db import Merchant, MerchantMatch, PlatformMerchant, engine, get_session
+from storage.db import Merchant, MerchantMatch, PlatformMerchant, engine, get_session  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,

@@ -30,10 +30,9 @@ default_args = {
 
 def _scrape_grubhub(market: str, **kwargs):
     """Task callable: run the Grubhub listing scraper for one market."""
-    import yaml
-    from scrapers.grubhub.listing import GrubhubListingScraper
     from processing.normalizer import normalize_listing
-    from storage.db import get_session, PlatformMerchant, MenuItemRow, CrawlRun
+    from scrapers.grubhub.listing import GrubhubListingScraper
+    from storage.db import CrawlRun, MenuItemRow, PlatformMerchant, get_session
 
     session = get_session()
     crawl = CrawlRun(platform="grubhub", market=market)

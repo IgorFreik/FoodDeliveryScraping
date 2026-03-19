@@ -9,12 +9,12 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import pandas as pd
 from sqlalchemy import text
 
-from storage.db import get_session, engine, PlatformMerchant, Merchant, MerchantMatch
-from processing.entity_resolution import (
-    rule_based_match,
-    merge_matches_to_entities,
-)
 from analytics.coverage_report import generate_coverage_report, print_report
+from processing.entity_resolution import (
+    merge_matches_to_entities,
+    rule_based_match,
+)
+from storage.db import Merchant, MerchantMatch, PlatformMerchant, engine, get_session
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,7 +35,7 @@ def ingest_data(data):
     """Upsert scraped data into the platform_merchants table."""
     session = get_session()
     logger.info("Ingesting %d listings into the database...", len(data))
-    
+
     try:
         for item in data:
             # Check if exists first to avoid UniqueViolation on (platform, platform_id)
@@ -43,7 +43,7 @@ def ingest_data(data):
                 platform=item["platform"],
                 platform_id=item["platform_merchant_id"]
             ).first()
-            
+
             if existing:
                 pm = existing
                 pm.name = item["name"]
@@ -72,15 +72,15 @@ def ingest_data(data):
                     market=item["market"],
                     raw_url=item.get("raw_url"),
                 )
-            
+
             # Handle geometry if coordinates exist
             lat, lng = item.get("lat"), item.get("lng")
             if lat and lng:
                 pm.geom = f"SRID=4326;POINT({lng} {lat})"
-            
+
             if not existing:
                 session.add(pm)
-        
+
         session.commit()
         logger.info("Data ingestion complete.")
     except Exception as e:
@@ -94,7 +94,7 @@ def resolve_entities():
     """Run cross-platform entity resolution."""
     logger.info("Running entity resolution...")
     session = get_session()
-    
+
     # Load platform merchants into a DataFrame
     query = text("""
         SELECT
@@ -120,10 +120,10 @@ def resolve_entities():
 
     # Step 1: Rule-based matching
     matches = rule_based_match(df)
-    
+
     # Step 2: Cluster into entities
     clusters = merge_matches_to_entities(matches)
-    
+
     # Step 3: Persistence (simplistic version of DAG logic)
     # Clear old results for this market for a clean report
     session.execute(text("DELETE FROM merchant_matches WHERE platform_merchant_id IN (SELECT id FROM platform_merchants WHERE market='amsterdam')"))
@@ -168,12 +168,12 @@ def main():
 
     if found_files:
         for input_file in found_files:
-            with open(input_file, "r") as f:
+            with open(input_file) as f:
                 file_data = json.load(f)
                 logger.info("Loaded %d listings from %s", len(file_data), input_file.name)
                 data.extend(file_data)
     elif INPUT_FILE_LEGACY.exists():
-        with open(INPUT_FILE_LEGACY, "r") as f:
+        with open(INPUT_FILE_LEGACY) as f:
             data = json.load(f)
             logger.info("Loaded %d listings from legacy file %s", len(data), INPUT_FILE_LEGACY.name)
     else:
@@ -191,16 +191,16 @@ def main():
     # 3. Report
     logger.info("Generating coverage report...")
     report = generate_coverage_report()
-    
-    # Filter report to just Amsterdam for the printout if possible, 
+
+    # Filter report to just Amsterdam for the printout if possible,
     # but generate_coverage_report does full DB.
-    
+
     print_report(report)
 
     # 4. Save report
     with open(REPORT_OUTPUT, "w") as f:
         json.dump(report, f, indent=2, default=str)
-    
+
     logger.info(f"Report saved to {REPORT_OUTPUT}")
 
 if __name__ == "__main__":

@@ -1,21 +1,17 @@
 """
 Cross-platform entity resolution for merchant matching.
 
-Uses Splink (with DuckDB backend) for probabilistic record linkage and
-rapidfuzz for fuzzy string matching. Designed to match merchants across
-platforms (e.g. "Joe's Pizza" on DoorDash with "Joe's Famous Pizza" on
-Grubhub) into a single canonical entity.
+Simple approach: extract restaurant name, street number, street name, and city
+from each record, then apply fuzzy matching on those fields.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
-from typing import Optional
 
-import duckdb
 import pandas as pd
-from haversine import haversine, Unit
 from rapidfuzz import fuzz
 
 logger = logging.getLogger(__name__)
@@ -23,10 +19,7 @@ logger = logging.getLogger(__name__)
 
 # ── Configuration ───────────────────────────────────────────────────
 
-# Thresholds for the rule-based fast path
-NAME_SIMILARITY_THRESHOLD = 0.80     # Jaro-Winkler ratio (0–1)
-GEO_DISTANCE_THRESHOLD_M = 150      # meters
-HIGH_CONFIDENCE_THRESHOLD = 0.90
+FUZZ_THRESHOLD = 80  # Min rapidfuzz ratio (0–100) for each field to match
 
 
 @dataclass
@@ -37,208 +30,254 @@ class MatchCandidate:
     name_a: str
     name_b: str
     name_similarity: float
-    geo_distance_m: Optional[float]
+    geo_distance_m: None
     address_match: bool
     confidence: float
     match_method: str
 
 
-# ── Rule-Based Fast Path ───────────────────────────────────────────
+@dataclass
+class ExtractedFields:
+    """Parsed fields from a merchant record."""
+    name: str
+    street_number: str
+    street_name: str
+    city: str
 
 
-def compute_name_similarity(name_a: str, name_b: str) -> float:
-    """Jaro-Winkler similarity between two merchant names."""
-    return fuzz.WRatio(name_a.lower(), name_b.lower()) / 100.0
+# ── Extraction ───────────────────────────────────────────────────────
 
 
-def compute_geo_distance(
-    lat_a: float | None, lng_a: float | None,
-    lat_b: float | None, lng_b: float | None,
-) -> float | None:
+def _normalize(s: str) -> str:
+    """Lowercase, collapse whitespace."""
+    return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+
+def extract_restaurant_name(name: str) -> str:
+    """Clean restaurant name: strip location suffixes, platform tags, etc."""
+    from processing.normalizer import normalize_name
+
+    return _normalize(normalize_name(name or ""))
+
+
+def extract_address_fields(address: str) -> ExtractedFields:
     """
-    Haversine distance in meters between two points.
-    Returns None if either coordinate pair is missing.
+    Parse address into street_number, street_name, city.
+    Handles NL format: "Overtoom 123, 1054 Amsterdam" or "123 Overtoom, 1011 AA Amsterdam"
+    and generic: "123 Main St, Amsterdam".
     """
-    if any(v is None for v in (lat_a, lng_a, lat_b, lng_b)):
-        return None
-    return haversine((lat_a, lng_a), (lat_b, lng_b), unit=Unit.METERS)
+    from processing.normalizer import normalize_address
+
+    addr = _normalize(normalize_address(address or ""))
+    street_number = ""
+    street_name = ""
+    city = ""
+
+    if not addr:
+        return ExtractedFields(name="", street_number="", street_name="", city="")
+
+    # NL postal: 4 digits + optional 2 letters (1011, 1011 AA)
+    postal_match = re.search(r"\b(\d{4})\s*([A-Z]{2})?\b", addr, re.I)
+    if postal_match:
+        # City is typically after postal code
+        after_postal = addr[postal_match.end() :].strip(" ,")
+        city_parts = after_postal.split(",")
+        if city_parts:
+            city = city_parts[0].strip()
+        before_postal = addr[: postal_match.start()].strip(" ,")
+    else:
+        # No postal: split on comma, last part often city
+        parts = [p.strip() for p in addr.split(",")]
+        if len(parts) >= 2:
+            city = parts[-1]
+            before_postal = ",".join(parts[:-1])
+        else:
+            before_postal = addr
+            city = ""
+
+    # Extract street number (first standalone number)
+    num_match = re.search(r"\b(\d+[a-zA-Z]?)\b", before_postal)
+    if num_match:
+        street_number = num_match.group(1).lower()
+        street_name = (
+            before_postal[: num_match.start()].strip() + " " + before_postal[num_match.end() :].strip()
+        ).strip()
+    else:
+        street_name = before_postal
+
+    street_name = re.sub(r"\s+", " ", street_name).strip(" ,-")
+    return ExtractedFields(
+        name="",
+        street_number=street_number,
+        street_name=street_name,
+        city=city,
+    )
 
 
-def rule_based_match(
-    merchants_df: pd.DataFrame,
-) -> list[MatchCandidate]:
-    """
-    Fast rule-based matching:
-    1. Block by market (same zip/market only)
-    2. For each cross-platform pair, compute name similarity + geo distance
-    3. Accept high-confidence matches; queue ambiguous ones
+def _fuzz_score(a: str, b: str) -> int:
+    """Return 0–100 similarity; 100 if both empty."""
+    if not a and not b:
+        return 100
+    if not a or not b:
+        return 0
+    return max(fuzz.ratio(a, b), fuzz.token_set_ratio(a, b))
 
-    ``merchants_df`` must have columns:
-        id, platform, name, address, lat, lng, market
+
+# ── Matching ────────────────────────────────────────────────────────
+
+
+def rule_based_match(merchants_df: pd.DataFrame) -> list[MatchCandidate]:
     """
+    Simple matching: extract name, street_number, street_name, city;
+    compare cross-platform pairs with fuzzy logic on each field.
+    Match when all non-empty fields score above FUZZ_THRESHOLD.
+    """
+    df = merchants_df.copy()
+    if df["market"].isna().any():
+        mode_val = df["market"].mode()
+        fill_val = mode_val.iloc[0] if len(mode_val) > 0 else "unknown"
+        df["market"] = df["market"].fillna(fill_val)
+
+    # Pre-extract fields for each row
+    def extract_row(row) -> ExtractedFields:
+        name = extract_restaurant_name(getattr(row, "name", "") or "")
+        addr = extract_address_fields(str(getattr(row, "address", "") or ""))
+        return ExtractedFields(
+            name=name,
+            street_number=addr.street_number,
+            street_name=addr.street_name,
+            city=addr.city,
+        )
+
     matches: list[MatchCandidate] = []
 
-    for market, group in merchants_df.groupby("market"):
+    for market, group in df.groupby("market"):
         platforms = group["platform"].unique()
         if len(platforms) < 2:
             continue
 
-        # Only compare across different platforms
-        for i, row_a in group.iterrows():
-            for j, row_b in group.iterrows():
-                if row_a["platform"] >= row_b["platform"]:
-                    continue  # Avoid duplicate pairs and same-platform
+        records = list(group.itertuples(index=False))
+        for i, row_a in enumerate(records):
+            fields_a = extract_row(row_a)
+            for j, row_b in enumerate(records):
+                if i >= j or row_a.platform == row_b.platform:
+                    continue
 
-                name_sim = compute_name_similarity(row_a["name"], row_b["name"])
-                if name_sim < 0.6:
-                    continue  # Skip obviously different names
+                fields_b = extract_row(row_b)
 
-                geo_dist = compute_geo_distance(
-                    row_a.get("lat"), row_a.get("lng"),
-                    row_b.get("lat"), row_b.get("lng"),
-                )
+                # Fuzzy score each field (0–100)
+                name_score = _fuzz_score(fields_a.name, fields_b.name)
+                num_score = _fuzz_score(fields_a.street_number, fields_b.street_number)
+                street_score = _fuzz_score(fields_a.street_name, fields_b.street_name)
+                city_score = _fuzz_score(fields_a.city, fields_b.city)
 
-                address_match = (
-                    bool(row_a.get("address")) and
-                    bool(row_b.get("address")) and
-                    fuzz.ratio(
-                        str(row_a["address"]).lower(),
-                        str(row_b["address"]).lower(),
-                    ) > 85
-                )
+                # Require name to match (restaurant identity)
+                if name_score < FUZZ_THRESHOLD:
+                    continue
 
-                # Score the match
-                confidence = _score_match(name_sim, geo_dist, address_match)
+                # For address fields: if both have data, they must match; if one empty, skip that field
+                addr_ok = True
+                if fields_a.street_number and fields_b.street_number:
+                    addr_ok = addr_ok and (num_score >= FUZZ_THRESHOLD)
+                if fields_a.street_name and fields_b.street_name:
+                    addr_ok = addr_ok and (street_score >= FUZZ_THRESHOLD)
+                if fields_a.city and fields_b.city:
+                    addr_ok = addr_ok and (city_score >= FUZZ_THRESHOLD)
 
-                # Accept matches with reasonable confidence.
-                # Threshold is lower than NAME_SIMILARITY_THRESHOLD because
-                # the composite score includes geo + address signals.
-                if confidence >= 0.70:
-                    matches.append(
-                        MatchCandidate(
-                            platform_merchant_id_a=int(row_a["id"]),
-                            platform_merchant_id_b=int(row_b["id"]),
-                            name_a=row_a["name"],
-                            name_b=row_b["name"],
-                            name_similarity=name_sim,
-                            geo_distance_m=geo_dist,
-                            address_match=address_match,
-                            confidence=confidence,
-                            match_method="rule_based",
-                        )
+                if not addr_ok:
+                    continue
+
+                # Compute overall confidence (average of non-empty field scores)
+                scores = [name_score]
+                if fields_a.street_number and fields_b.street_number:
+                    scores.append(num_score)
+                if fields_a.street_name and fields_b.street_name:
+                    scores.append(street_score)
+                if fields_a.city and fields_b.city:
+                    scores.append(city_score)
+                confidence = sum(scores) / len(scores) / 100.0
+
+                matches.append(
+                    MatchCandidate(
+                        platform_merchant_id_a=int(getattr(row_a, "id")),
+                        platform_merchant_id_b=int(getattr(row_b, "id")),
+                        name_a=getattr(row_a, "name", ""),
+                        name_b=getattr(row_b, "name", ""),
+                        name_similarity=name_score / 100.0,
+                        geo_distance_m=None,
+                        address_match=addr_ok,
+                        confidence=confidence,
+                        match_method="field_fuzzy",
                     )
+                )
 
     logger.info("Rule-based matching found %d candidate pairs.", len(matches))
     return matches
 
 
-def _score_match(
-    name_sim: float,
-    geo_dist: float | None,
-    address_match: bool,
-) -> float:
+def _compute_pair_similarity(fields_a: ExtractedFields, fields_b: ExtractedFields) -> float:
     """
-    Weighted scoring for a candidate match.
-
-    Base weights:
-    - Name similarity: 50%
-    - Geo proximity:   30%
-    - Address match:   20%
-
-    When geo or address signals are unavailable, their weight is
-    redistributed proportionally to the available signals.
+    Compute similarity (0–1) between two extracted records.
+    Uses same logic as rule_based_match but always returns the score.
     """
-    signals: list[tuple[float, float]] = []  # (weight, score)
-    signals.append((0.50, name_sim))
+    name_score = _fuzz_score(fields_a.name, fields_b.name)
+    num_score = _fuzz_score(fields_a.street_number, fields_b.street_number)
+    street_score = _fuzz_score(fields_a.street_name, fields_b.street_name)
+    city_score = _fuzz_score(fields_a.city, fields_b.city)
 
-    if geo_dist is not None:
-        if geo_dist < 50:
-            geo_score = 1.0
-        elif geo_dist < GEO_DISTANCE_THRESHOLD_M:
-            geo_score = 1.0 - (geo_dist / GEO_DISTANCE_THRESHOLD_M)
-        else:
-            geo_score = 0.0
-        signals.append((0.30, geo_score))
-
-    if address_match is not None and (geo_dist is not None or address_match):
-        # Only count address signal if we actually have address data
-        signals.append((0.20, 1.0 if address_match else 0.0))
-
-    # Redistribute: normalize weights to sum to 1.0
-    total_weight = sum(w for w, _ in signals)
-    if total_weight == 0:
-        return 0.0
-    return sum((w / total_weight) * s for w, s in signals)
+    scores = [name_score]
+    if fields_a.street_number and fields_b.street_number:
+        scores.append(num_score)
+    if fields_a.street_name and fields_b.street_name:
+        scores.append(street_score)
+    if fields_a.city and fields_b.city:
+        scores.append(city_score)
+    return sum(scores) / len(scores) / 100.0
 
 
-# ── Splink Probabilistic Matching ──────────────────────────────────
-
-
-def splink_match(merchants_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Run Splink probabilistic record linkage using DuckDB backend.
-
-    Returns a DataFrame of matched pairs with columns:
-        id_l, id_r, match_probability
-    """
+def _row_val(row, key: str, default=None):
+    """Get value from row (Series or named tuple)."""
     try:
-        import splink.duckdb.linker as duckdb_linker
-        from splink.duckdb.linker import DuckDBLinker
-    except ImportError:
-        # Splink 4.x uses a different import structure
-        from splink import Linker, DuckDBAPI, SettingsCreator, block_on
-        import splink.comparison_library as cl
+        return row[key]
+    except (TypeError, KeyError):
+        return getattr(row, key, default)
 
-        db_api = DuckDBAPI()
 
-        settings = SettingsCreator(
-            link_type="link_only",
-            comparisons=[
-                cl.JaroWinklerAtThresholds("name", score_threshold_or_thresholds=[0.9, 0.7]),
-                cl.LevenshteinAtThresholds("address", distance_threshold_or_thresholds=[3, 5]),
-            ],
-            blocking_rules_to_generate_predictions=[
-                block_on("market"),
-            ],
+def add_row_confidence_to_target(
+    merchants_df: pd.DataFrame,
+    target_row,
+) -> pd.DataFrame:
+    """
+    Add a ``confidence`` column: for each row, the similarity (0–1) between
+    that row and the target row. Target row gets 1.0. Rows from the same
+    platform as target get 0.0 (not compared).
+    """
+    def extract_row(row) -> ExtractedFields:
+        name = extract_restaurant_name(str(_row_val(row, "name") or ""))
+        addr = extract_address_fields(str(_row_val(row, "address") or ""))
+        return ExtractedFields(
+            name=name,
+            street_number=addr.street_number,
+            street_name=addr.street_name,
+            city=addr.city,
         )
 
-        # Prepare: split by platform for link_only mode
-        platforms = merchants_df["platform"].unique()
-        if len(platforms) < 2:
-            logger.warning("Need ≥2 platforms for Splink matching, got %d", len(platforms))
-            return pd.DataFrame(columns=["id_l", "id_r", "match_probability"])
+    target_id = int(_row_val(target_row, "id", 0))
+    target_platform = _row_val(target_row, "platform", "")
+    target_fields = extract_row(target_row)
 
-        frames = {
-            p: merchants_df[merchants_df["platform"] == p].reset_index(drop=True)
-            for p in platforms
-        }
-
-        linker = Linker(
-            list(frames.values()),
-            settings,
-            db_api=db_api,
-        )
-
-        linker.training.estimate_u_using_random_sampling(max_pairs=5_000_000)
-
-        for col in ["name", "address"]:
-            try:
-                linker.training.estimate_parameters_using_expectation_maximisation(
-                    block_on(col), estimate_without_term_frequencies=True
-                )
-            except Exception as exc:
-                logger.warning("EM training on '%s' failed: %s", col, exc)
-
-        predictions = linker.inference.predict(threshold_match_probability=0.6)
-        results_df = predictions.as_pandas_dataframe()
-
-        return results_df[["unique_id_l", "unique_id_r", "match_probability"]].rename(
-            columns={"unique_id_l": "id_l", "unique_id_r": "id_r"}
-        )
-
-    except Exception as exc:
-        logger.error("Splink matching failed: %s", exc, exc_info=True)
-        return pd.DataFrame(columns=["id_l", "id_r", "match_probability"])
+    df = merchants_df.copy()
+    confs = []
+    for row in df.itertuples(index=False):
+        if _row_val(row, "id") == target_id:
+            confs.append(1.0)
+        elif _row_val(row, "platform") == target_platform:
+            confs.append(0.0)
+        else:
+            row_fields = extract_row(row)
+            confs.append(_compute_pair_similarity(target_fields, row_fields))
+    df["confidence"] = confs
+    return df
 
 
 # ── Merge Logic ─────────────────────────────────────────────────────
@@ -278,3 +317,130 @@ def merge_matches_to_entities(
         clusters.setdefault(root, []).append(node)
 
     return clusters
+
+
+# ── Full Pipeline (DB load → match → persist) ──────────────────────────
+
+
+def run_resolve_entities() -> None:
+    """
+    Full entity resolution pipeline: load platform_merchants from DB,
+    run rule-based matching, cluster, and persist to merchants + merchant_matches.
+
+    Used by both the Airflow DAG and local test scripts.
+    """
+    from storage.db import Merchant, MerchantMatch, engine, get_session
+
+    session = get_session()
+
+    query = """
+        SELECT
+            id,
+            platform,
+            name,
+            address,
+            ST_Y(geom::geometry) AS lat,
+            ST_X(geom::geometry) AS lng,
+            market
+        FROM platform_merchants
+        WHERE name IS NOT NULL
+    """
+
+    try:
+        conn = engine.raw_connection()
+        try:
+            df = pd.read_sql(query, conn)
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.error("Failed to read from database: %s", e)
+        raise
+
+    if df.empty:
+        logger.info("No merchants to resolve.")
+        return
+
+    total_input = len(df)
+    platform_counts = df.groupby("platform").size().to_dict()
+    logger.info(
+        "Running entity resolution on %d merchants (platforms: %s)",
+        total_input,
+        platform_counts,
+    )
+
+    matches = rule_based_match(df)
+    num_pairs = len(matches)
+    matched_ids = set()
+    for m in matches:
+        matched_ids.add(m.platform_merchant_id_a)
+        matched_ids.add(m.platform_merchant_id_b)
+    num_matched_listings = len(matched_ids)
+
+    logger.info(
+        "Rule-based matching: %d pairs, %d unique listings matched",
+        num_pairs,
+        num_matched_listings,
+    )
+
+    clusters = merge_matches_to_entities(matches)
+    total_in_clusters = sum(len(v) for v in clusters.values())
+    logger.info(
+        "Merged into %d entity clusters (%d total matched listings)",
+        len(clusters),
+        total_in_clusters,
+    )
+
+    match_lookup = {
+        (m.platform_merchant_id_a, m.platform_merchant_id_b): m
+        for m in matches
+    }
+
+    for entity_root, member_ids in clusters.items():
+        members = df[df["id"].isin(member_ids)]
+        canonical_row = members.iloc[0]
+        is_on_our_platform = (members["platform"] == "ubereats").any()
+
+        merchant = Merchant(
+            canonical_name=canonical_row["name"],
+            canonical_addr=canonical_row.get("address", ""),
+            is_on_our_platform=is_on_our_platform,
+        )
+        if canonical_row.get("lat") is not None and canonical_row.get("lng") is not None:
+            merchant.canonical_geom = (
+                f"SRID=4326;POINT({canonical_row['lng']} {canonical_row['lat']})"
+            )
+
+        session.add(merchant)
+        session.flush()
+
+        for pm_id in member_ids:
+            confidence = 1.0
+            method = "cluster_member"
+            for pair_key in [(pm_id, entity_root), (entity_root, pm_id)]:
+                if pair_key in match_lookup:
+                    confidence = match_lookup[pair_key].confidence
+                    method = match_lookup[pair_key].match_method
+                    break
+
+            mm = MerchantMatch(
+                platform_merchant_id=pm_id,
+                merchant_id=merchant.id,
+                confidence=confidence,
+                match_method=method,
+            )
+            session.merge(mm)
+
+    try:
+        session.commit()
+    except Exception as e:
+        logger.error("Failed to commit resolution results: %s", e)
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+    logger.info(
+        "Entity resolution complete: %d entities, %d matched listings persisted",
+        len(clusters),
+        total_in_clusters,
+    )

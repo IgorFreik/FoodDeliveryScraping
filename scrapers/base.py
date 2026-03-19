@@ -11,17 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import random
 import time
 from abc import ABC, abstractmethod
-from typing import Any
 
-import yaml
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from processing.models import MerchantListing
-from scrapers.utils.proxy import get_proxy_config, get_browser_url
+from scrapers.utils.proxy import get_browser_url, get_proxy_config
 from scrapers.utils.stealth import apply_stealth
 from storage.minio_client import upload_raw_html
 
@@ -61,37 +58,83 @@ class BaseScraper(ABC):
         self._playwright = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
+        self._reusable_page: Page | None = None
 
     # ── Lifecycle ───────────────────────────────────────────────────
 
     async def __aenter__(self):
         self._playwright = await async_playwright().start()
-        
+        await self._setup_browser()
+        return self
+
+    async def _setup_browser(self):
+        """Internal helper to (re)initialize the browser and context."""
+        # Close existing if any
+        try:
+            if self._context:
+                await self._context.close()
+            if self._browser:
+                await self._browser.close()
+        except Exception:
+            pass
+
         browser_url = get_browser_url()
         if browser_url:
-            logger.info("[%s] Connecting to Bright Data Scraping Browser via CDP...", self.PLATFORM)
-            self._browser = await self._playwright.chromium.connect_over_cdp(browser_url)
-            # When connecting via CDP to Bright Data, use the default context provided by the remote browser
-            # Overriding headers/locale is often forbidden or causes protocol errors.
-            self._context = self._browser.contexts[0] if self._browser.contexts else await self._browser.new_context()
+            logger.info("[%s] Connecting to Bright Data CDP...", self.PLATFORM)
+            self._browser = await self._playwright.chromium.connect_over_cdp(
+                browser_url
+            )
+            self._context = (
+                self._browser.contexts[0]
+                if self._browser.contexts
+                else await self._browser.new_context()
+            )
         else:
             proxy_config = get_proxy_config()
-            launch_kwargs: dict[str, Any] = {
+            launch_kwargs = {
                 "headless": self.headless,
-                "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+                "args": [
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                ],
             }
             if proxy_config:
                 launch_kwargs["proxy"] = proxy_config
-            
             self._browser = await self._playwright.chromium.launch(**launch_kwargs)
             self._context = await self._browser.new_context(
-                viewport={"width": 1920, "height": 1080},
-                locale="en-US",
-                timezone_id="America/New_York",
+                viewport={"width": 1920, "height": 1080}
             )
             await apply_stealth(self._context)
 
-        return self
+        self._reusable_page = None
+
+    async def _get_reusable_page(self) -> Page:
+        """Get or create a page for reuse. Recovers if browser crashed."""
+        if self._reusable_page:
+            try:
+                # Check if page is still alive
+                await self._reusable_page.evaluate("1")
+                return self._reusable_page
+            except Exception:
+                logger.warning("[%s] Reusable page lost, recovering...", self.PLATFORM)
+                self._reusable_page = None
+
+        # If we get here, we need a new page (and possibly a new browser)
+        for attempt in range(2):
+            try:
+                if not self._context or not self._browser:
+                    await self._setup_browser()
+                self._reusable_page = await self._context.new_page()
+                return self._reusable_page
+            except Exception as e:
+                if attempt == 0:
+                    logger.warning(
+                        "[%s] Browser context lost, restarting...", self.PLATFORM
+                    )
+                    await self._setup_browser()
+                else:
+                    raise e
 
     async def __aexit__(self, *args):
         if self._context:
@@ -129,7 +172,9 @@ class BaseScraper(ABC):
                 await self._rate_limit()
                 page: Page = await self._context.new_page()
                 try:
-                    response = await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                    response = await page.goto(
+                        url, wait_until="domcontentloaded", timeout=30_000
+                    )
 
                     if response and response.status >= 400:
                         raise RuntimeError(f"HTTP {response.status} for {url}")
@@ -143,10 +188,15 @@ class BaseScraper(ABC):
 
             except Exception as exc:
                 last_exc = exc
-                wait = 2 ** attempt + random.random()
+                wait = 2**attempt + random.random()
                 logger.warning(
                     "[%s] Attempt %d/%d failed for %s: %s — retrying in %.1fs",
-                    self.PLATFORM, attempt, self.max_retries, url, exc, wait,
+                    self.PLATFORM,
+                    attempt,
+                    self.max_retries,
+                    url,
+                    exc,
+                    wait,
                 )
                 await asyncio.sleep(wait)
 
@@ -166,6 +216,7 @@ class BaseScraper(ABC):
         )
 
         from streaming.producer import publish_event
+
         publish_event(
             topic="raw-html-scraped",
             event_data={
@@ -174,7 +225,7 @@ class BaseScraper(ABC):
                 "merchant_id": merchant_id,
                 "minio_key": s3_key,
                 "scraped_at": time.time(),
-            }
+            },
         )
 
         return s3_key
@@ -196,22 +247,32 @@ class BaseScraper(ABC):
     async def run(self) -> list[MerchantListing]:
         """Full scrape: listings → details for each merchant."""
         listings = await self.scrape_listings()
-        logger.info("[%s/%s] Found %d listings.", self.PLATFORM, self.market, len(listings))
+        logger.info(
+            "[%s/%s] Found %d listings.", self.PLATFORM, self.market, len(listings)
+        )
 
         enriched: list[MerchantListing] = []
         for listing in listings:
             try:
+                # If already enriched (e.g. during listing phase), skip
+                if listing.address:
+                    enriched.append(listing)
+                    continue
+
                 detail = await self.scrape_detail(listing)
                 enriched.append(detail)
             except Exception as exc:
                 logger.error(
                     "[%s] Failed to scrape detail for %s: %s",
-                    self.PLATFORM, listing.name, exc,
+                    self.PLATFORM,
+                    listing.name,
+                    exc,
                 )
                 enriched.append(listing)  # Keep stub even if detail fails
 
         # Flush Kafka events before exiting
         from streaming.producer import flush_producer
+
         flush_producer()
 
         return enriched

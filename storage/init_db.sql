@@ -81,6 +81,14 @@ CREATE TABLE IF NOT EXISTS crawl_runs (
     error_detail    TEXT
 );
 
+-- Daily snapshot of merchant counts per platform (for week-over-week deltas)
+CREATE TABLE IF NOT EXISTS platform_merchant_daily_counts (
+    snapshot_date DATE NOT NULL,
+    platform      TEXT NOT NULL,
+    count         BIGINT NOT NULL,
+    PRIMARY KEY (snapshot_date, platform)
+);
+
 -- ────────────────────────────────────────────────────────────────────
 -- Indexes
 -- ────────────────────────────────────────────────────────────────────

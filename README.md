@@ -99,7 +99,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-This starts PostgreSQL, Kafka, MinIO, Airflow (webserver + scheduler), Prometheus, and Grafana.
+This starts PostgreSQL, Kafka, MinIO, Airflow (webserver + scheduler), parser-consumer (Kafka → parse → DB), Prometheus, and Grafana.
 
 | Service | URL | Default credentials |
 |---|---|---|
@@ -113,7 +113,8 @@ This starts PostgreSQL, Kafka, MinIO, Airflow (webserver + scheduler), Prometheu
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
+# Or: pip install -r requirements.txt
 playwright install chromium
 ```
 
@@ -154,11 +155,14 @@ docker compose exec airflow-webserver airflow dags trigger scrape_ubereats
 │   ├── scrape_ubereats.py       # Airflow DAG for UberEats
 │   ├── scrape_doordash.py       # Airflow DAG for DoorDash
 │   ├── scrape_grubhub.py        # Airflow DAG for Grubhub
-│   └── scrape_justeattakeaway.py
+│   ├── scrape_justeattakeaway.py
+│   ├── resolve_entities.py     # Entity resolution DAG
+│   └── snapshot_merchant_counts.py  # Daily merchant count snapshots for Grafana
 ├── storage/
 │   ├── db.py                    # SQLAlchemy models and session management
 │   ├── minio_client.py          # MinIO upload helpers
-│   └── init_db.sql              # PostgreSQL + PostGIS schema
+│   ├── init_db.sql              # PostgreSQL + PostGIS schema
+│   └── migrations/              # SQL migrations (e.g. platform_merchant_daily_counts)
 ├── streaming/
 │   ├── producer.py              # Kafka event publisher
 │   └── parser_consumer.py       # Kafka consumer that parses raw HTML
@@ -171,10 +175,13 @@ docker compose exec airflow-webserver airflow dags trigger scrape_ubereats
 │   ├── prometheus.yml           # Prometheus scrape config
 │   └── grafana/                 # Grafana dashboard provisioning
 ├── tests/
-│   ├── test_parser.py           # Unit tests for all platform parsers
+│   ├── test_parser.py            # DoorDash, Grubhub parsers
+│   ├── test_parser_ubereats.py   # Uber Eats parser
+│   ├── test_parser_justeattakeaway.py  # JustEatTakeaway parser
 │   ├── test_entity_resolution.py
 │   └── test_data_quality.py
-├── docs/                        # Media assets for README
+├── examples/                     # Integration scripts (require DB/MinIO/network)
+├── docs/                         # Media assets for README
 ├── docker-compose.yml
 ├── Dockerfile.airflow
 └── requirements.txt

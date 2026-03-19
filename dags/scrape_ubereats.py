@@ -35,10 +35,9 @@ default_args = {
 
 def _scrape_ubereats(market: str, **kwargs):
     """Task callable: run the Uber Eats listing scraper for one market."""
-    import yaml
-    from scrapers.ubereats.listing import UberEatsListingScraper
     from processing.normalizer import normalize_listing
-    from storage.db import get_session, PlatformMerchant, MenuItemRow, CrawlRun
+    from scrapers.ubereats.listing import UberEatsListingScraper
+    from storage.db import CrawlRun, MenuItemRow, PlatformMerchant, get_session
 
     session = get_session()
     crawl = CrawlRun(platform="ubereats", market=market)
@@ -52,7 +51,7 @@ def _scrape_ubereats(market: str, **kwargs):
     try:
         listings = asyncio.run(_run())
 
-        for listing in listings:
+        for i, listing in enumerate(listings):
             listing = normalize_listing(listing)
 
             pm = PlatformMerchant(
@@ -77,7 +76,7 @@ def _scrape_ubereats(market: str, **kwargs):
 
             # Perform PostgreSQL Upsert
             from sqlalchemy.dialects.postgresql import insert
-            
+
             stmt = insert(PlatformMerchant).values(
                 platform=pm.platform,
                 platform_id=pm.platform_id,
@@ -95,21 +94,23 @@ def _scrape_ubereats(market: str, **kwargs):
                 raw_url=pm.raw_url,
                 scraped_at=datetime.utcnow()
             )
-            
+
             update_dict = {
                 c.name: c
                 for c in stmt.excluded
                 if c.name not in ("id", "platform", "platform_id")
             }
-            
+
             do_update_stmt = stmt.on_conflict_do_update(
                 constraint="platform_merchants_platform_platform_id_key",
                 set_=update_dict
             ).returning(PlatformMerchant.id)
-            
+
             result = session.execute(do_update_stmt)
             merged_pm_id = result.scalar_one()
-            session.flush()
+
+            if pm.address:
+                logger.info("[DAG] Upserting merchant %s with address: %s", pm.name, pm.address)
 
             # Insert menu items
             for item in listing.menu_items:
@@ -121,6 +122,11 @@ def _scrape_ubereats(market: str, **kwargs):
                     category=item.category,
                 )
                 session.add(mi)
+
+            # Chunked commit every 50 records
+            if (i + 1) % 50 == 0:
+                session.commit()
+                logger.info("[DAG] Committed chunk of 50 merchants.")
 
         session.commit()
 

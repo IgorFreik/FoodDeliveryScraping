@@ -8,13 +8,14 @@ extracts merchant stubs using the parser module.
 from __future__ import annotations
 
 import logging
-import yaml
 from pathlib import Path
 
-from scrapers.base import BaseScraper
-from scrapers.utils.stealth import human_like_scroll
+import yaml
+
 from processing.models import MerchantListing
 from processing.parser import parse_doordash_listing
+from scrapers.base import BaseScraper
+from scrapers.utils.stealth import human_like_scroll
 
 logger = logging.getLogger(__name__)
 

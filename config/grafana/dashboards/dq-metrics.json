@@ -28,7 +28,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
         "y": 0
       },
@@ -56,7 +56,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH totals AS (\n  SELECT COUNT(*) as total FROM platform_merchants\n),\nmissing AS (\n  SELECT COUNT(*) as cnt FROM platform_merchants WHERE address IS NULL OR address = '' OR cuisine_tags IS NULL OR array_length(cuisine_tags, 1) = 0\n)\nSELECT \n  ROUND(GREATEST(0, (totals.total - missing.cnt)::numeric / NULLIF(totals.total, 0) * 100), 2) AS \"Completeness Score %\"\nFROM totals, missing;",
+          "rawSql": "WITH totals AS (\n  SELECT COUNT(*) as total FROM platform_merchants\n),\nmissing AS (\n  SELECT COUNT(*) as cnt FROM platform_merchants WHERE address IS NULL OR trim(address) = ''\n)\nSELECT \n  ROUND(GREATEST(0, (totals.total - missing.cnt)::numeric / NULLIF(totals.total, 0) * 100), 2) AS \"Completeness Score %\"\nFROM totals, missing;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -79,6 +79,7 @@
       ],
       "title": "Completeness Score",
       "type": "stat",
+      "description": "Share of merchants with non-empty address. Run scripts/diagnose_completeness.py to investigate gaps.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -114,94 +115,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "reduceOptions": {
-          "values": true,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        }
-      },
-      "pluginVersion": "11.1.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "postgres-scraper"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH totals AS (\n  SELECT COUNT(*) as total FROM platform_merchants\n),\ninvalid AS (\n  SELECT COUNT(*) as cnt FROM platform_merchants WHERE geom IS NULL OR ST_Equals(geom::geometry, ST_SetSRID(ST_MakePoint(0, 0), 4326))\n)\nSELECT \n  ROUND(GREATEST(0, (totals.total - invalid.cnt)::numeric / NULLIF(totals.total, 0) * 100), 2) AS \"Geo-Accuracy Score %\"\nFROM totals, invalid;",
-          "refId": "A",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        }
-      ],
-      "title": "Geo-Accuracy Score",
-      "type": "stat",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 85
-              },
-              {
-                "color": "green",
-                "value": 98
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      }
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "postgres-scraper"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 12,
+        "x": 12,
         "y": 0
       },
       "id": 3,
@@ -314,7 +229,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  platform,\n  COUNT(*) AS \"Missing Address\"\nFROM platform_merchants\nWHERE address IS NULL OR address = ''\nGROUP BY platform\nORDER BY \"Missing Address\" DESC;",
+          "rawSql": "SELECT p.platform, COALESCE(m.cnt, 0)::bigint AS \"Missing Address\"\nFROM (SELECT DISTINCT platform FROM platform_merchants) p\nLEFT JOIN (\n  SELECT platform, COUNT(*) AS cnt\n  FROM platform_merchants\n  WHERE address IS NULL OR trim(address) = ''\n  GROUP BY platform\n) m ON m.platform = p.platform\nORDER BY \"Missing Address\" DESC;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -377,15 +292,14 @@
       },
       "id": 5,
       "options": {
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "reduceOptions": {
-          "values": true,
-          "calcs": [
-            "lastNotNull"
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
           ],
+          "countRows": false,
           "fields": ""
         }
       },
@@ -399,7 +313,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  platform,\n  COUNT(*) AS \"Missing Geocode\"\nFROM platform_merchants\nWHERE geom IS NULL OR ST_Equals(geom::geometry, ST_SetSRID(ST_MakePoint(0, 0), 4326))\nGROUP BY platform\nORDER BY \"Missing Geocode\" DESC;",
+          "rawSql": "SELECT\n  platform AS \"Platform\",\n  COUNT(*) FILTER (WHERE address IS NULL OR trim(address) = '') AS \"Missing address\",\n  COUNT(*) FILTER (WHERE (address IS NOT NULL AND trim(address) != '') AND address !~ '[0-9]{4}\\s*[A-Z]{0,2}\\y') AS \"Missing postal\",\n  COUNT(*) FILTER (WHERE (address IS NOT NULL AND trim(address) != '') AND address ~ '[0-9]{4}\\s*[A-Z]{0,2}\\y' AND (trim(coalesce(substring(address from '[0-9]{4}\\s*[A-Z]{0,2}\\s*,?\\s*(.+)$'), '')) = '')) AS \"Missing city\"\nFROM platform_merchants\nGROUP BY platform\nORDER BY platform;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -420,7 +334,70 @@
           }
         }
       ],
-      "title": "Missing Geometry by Platform",
+      "title": "Missing Address Fields by Platform",
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-scraper"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 6,
+      "options": {
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "reduceOptions": {
+          "values": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-scraper"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH stats AS (\n  SELECT platform,\n    AVG(rating) AS avg_r, NULLIF(STDDEV(rating), 0) AS std_r,\n    AVG(review_count::numeric) AS avg_rc, NULLIF(STDDEV(review_count), 0) AS std_rc\n  FROM platform_merchants\n  GROUP BY platform\n)\nSELECT COUNT(*) AS \"Anomaly Merchants\"\nFROM platform_merchants pm\nJOIN stats s ON s.platform = pm.platform\nWHERE (pm.rating IS NOT NULL AND s.std_r IS NOT NULL AND ABS(pm.rating - s.avg_r) / s.std_r > 2)\n   OR (pm.review_count IS NOT NULL AND s.std_rc IS NOT NULL AND ABS(pm.review_count - s.avg_rc) / s.std_rc > 2);",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Anomaly Merchants (Statistical Outliers)",
       "type": "stat",
       "fieldConfig": {
         "defaults": {
@@ -437,15 +414,77 @@
               },
               {
                 "color": "orange",
-                "value": 50
+                "value": 10
               },
               {
                 "color": "red",
-                "value": 200
+                "value": 50
               }
             ]
           }
         },
+        "overrides": []
+      }
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-scraper"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-scraper"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH stats AS (\n  SELECT platform,\n    AVG(rating) AS avg_r, NULLIF(STDDEV(rating), 0) AS std_r,\n    AVG(review_count::numeric) AS avg_rc, NULLIF(STDDEV(review_count), 0) AS std_rc\n  FROM platform_merchants\n  GROUP BY platform\n)\nSELECT pm.platform AS \"Platform\", COUNT(*) AS \"Anomaly count\"\nFROM platform_merchants pm\nJOIN stats s ON s.platform = pm.platform\nWHERE (pm.rating IS NOT NULL AND s.std_r IS NOT NULL AND ABS(pm.rating - s.avg_r) / s.std_r > 2)\n   OR (pm.review_count IS NOT NULL AND s.std_rc IS NOT NULL AND ABS(pm.review_count - s.avg_rc) / s.std_rc > 2)\nGROUP BY pm.platform\nORDER BY \"Anomaly count\" DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Anomaly Merchants by Platform",
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {},
         "overrides": []
       }
     }
@@ -464,5 +503,5 @@
   "timezone": "browser",
   "title": "Merchant Intelligence Data Quality",
   "uid": "dq-metrics-sql-board",
-  "version": 1
+  "version": 2
 }

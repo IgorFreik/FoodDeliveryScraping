@@ -12,17 +12,15 @@ Tests:
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from processing.entity_resolution import (
-    compute_name_similarity,
-    compute_geo_distance,
-    rule_based_match,
-    merge_matches_to_entities,
-    _score_match,
     MatchCandidate,
+    _score_match,
+    compute_geo_distance,
+    compute_name_similarity,
+    merge_matches_to_entities,
+    rule_based_match,
 )
-
 
 # ── Name Similarity ─────────────────────────────────────────────────
 

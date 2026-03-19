@@ -35,8 +35,8 @@
       "id": 1,
       "options": {
         "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "area",
+        "colorMode": "none",
+        "graphMode": "none",
         "justifyMode": "auto",
         "reduceOptions": {
           "values": true,
@@ -56,7 +56,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  platform,\n  COUNT(DISTINCT platform_id) AS total_merchants\nFROM platform_merchants\nGROUP BY platform\nORDER BY total_merchants DESC;",
+          "rawSql": "SELECT platform, COUNT(DISTINCT platform_id) AS total_merchants\nFROM platform_merchants\nGROUP BY platform\nORDER BY total_merchants DESC;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -78,7 +78,8 @@
         }
       ],
       "title": "Total Merchants per Platform",
-      "type": "stat"
+      "type": "stat",
+      "description": "Live merchant counts per platform."
     },
     {
       "datasource": {
@@ -205,12 +206,12 @@
     "list": []
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-14d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Merchant Coverage Intelligence",
   "uid": "coverage-intel-board",
-  "version": 1
+  "version": 2
 }

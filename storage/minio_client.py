@@ -7,14 +7,12 @@ local MinIO and production AWS S3.
 
 from __future__ import annotations
 
-import io
 import json
 import os
 from datetime import datetime
 
 import boto3
 from botocore.config import Config as BotoConfig
-
 
 # ── Configuration ───────────────────────────────────────────────────
 

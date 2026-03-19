@@ -6,14 +6,15 @@ Navigates to Uber Eats city pages and extracts merchant stubs.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import yaml
 from pathlib import Path
 
-from scrapers.base import BaseScraper
-from scrapers.utils.stealth import human_like_scroll
+import yaml
+
 from processing.models import MerchantListing
-from processing.parser import parse_listing, parse_detail
+from processing.parser import parse_detail, parse_listing
+from scrapers.base import BaseScraper
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,9 @@ class UberEatsListingScraper(BaseScraper):
             # Sometimes a "Delivery details" modal pops up covering the screen.
             # Click "Done" to dismiss it.
             try:
-                done_btn = await page.query_selector('button[data-testid="done-button"]')
+                done_btn = await page.query_selector(
+                    'button[data-testid="done-button"]'
+                )
                 if done_btn and await done_btn.is_visible():
                     await done_btn.click()
                     await page.wait_for_timeout(2000)
@@ -158,13 +161,13 @@ class UberEatsListingScraper(BaseScraper):
 
         all_listings: list[MerchantListing] = []
         seen_ids: set[str] = set()
-        max_pages = 50
+        max_pages = 200
 
         try:
             page = await self._context.new_page()
             try:
                 await self._rate_limit()
-                await page.goto(base_url, wait_until="networkidle", timeout=60_000)
+                await page.goto(base_url, wait_until="domcontentloaded", timeout=60_000)
                 await page.wait_for_timeout(5000)
 
                 # Handle cookie banner and address prompt
@@ -247,18 +250,37 @@ class UberEatsListingScraper(BaseScraper):
         return all_listings
 
     async def scrape_detail(self, listing: MerchantListing) -> MerchantListing:
-        """Scrape individual merchant detail page for extra info like address."""
+        """Scrape individual merchant detail page for address and coordinates."""
         if not listing.raw_url:
             return listing
 
-        try:
-            page = await self._context.new_page()
-            try:
-                await self._rate_limit()
-                await page.goto(listing.raw_url, wait_until="networkidle", timeout=30_000)
-                await page.wait_for_timeout(2000)
+        # Optimization: If address was found on listing page, skip detail scrape
+        if listing.address:
+            logger.info(
+                "[UberEats] Skipping detail for %s (Address already found: %s)",
+                listing.name,
+                listing.address,
+            )
+            return listing
 
-                # Handle cookie banner if it appears on detail page
+        last_exc = None
+        for attempt in range(1, 4):  # 3 attempts
+            try:
+                page = await self._get_reusable_page()
+                await self._rate_limit()
+
+                # Extended timeout and more permissive wait
+                response = await page.goto(
+                    listing.raw_url, wait_until="domcontentloaded", timeout=60_000
+                )
+
+                if response and response.status == 404:
+                    logger.warning("[UberEats] Merchant page 404: %s", listing.name)
+                    return listing
+
+                await page.wait_for_timeout(3000)
+
+                # Handle cookie banner if it appears
                 await self._handle_prompts(page)
 
                 html = await page.content()
@@ -272,13 +294,20 @@ class UberEatsListingScraper(BaseScraper):
                     listing.lng = detail_data["lng"]
 
                 logger.info(
-                    "[UberEats] Detail scraped for %s: %s", listing.name, listing.address
+                    "[UberEats] Detail scraped for %s: %s",
+                    listing.name,
+                    listing.address,
                 )
-            finally:
-                await page.close()
-        except Exception as e:
-            logger.warning(
-                "[UberEats] Failed to scrape detail for %s: %s", listing.name, e
-            )
+                return listing  # Success
 
+            except Exception as e:
+                last_exc = e
+                logger.warning(
+                    "[UberEats] Attempt %d failed for %s: %s", attempt, listing.name, e
+                )
+                await asyncio.sleep(2 * attempt)
+
+        logger.error(
+            "[UberEats] All attempts failed for %s: %s", listing.name, last_exc
+        )
         return listing

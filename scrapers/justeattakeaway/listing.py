@@ -8,13 +8,14 @@ extracts merchant stubs using the parser module.
 from __future__ import annotations
 
 import logging
-import yaml
 from pathlib import Path
 
+import yaml
+
+from processing.models import MerchantListing
+from processing.parser import parse_detail, parse_listing
 from scrapers.base import BaseScraper
 from scrapers.utils.stealth import human_like_scroll
-from processing.models import MerchantListing
-from processing.parser import parse_listing, parse_detail
 
 logger = logging.getLogger(__name__)
 
@@ -90,12 +91,12 @@ class JustEatTakeawayListingScraper(BaseScraper):
                 previous_count = 0
                 for scroll_round in range(5):
                     await human_like_scroll(
-                        page, scroll_count=3
-                    )  # FIXME: CHANGE TO 40 AFTER TESTING
+                        page, scroll_count=50
+                    )
                     await page.wait_for_timeout(2000)
 
                     html = await page.content()
-                    listings = parse_listing(self.PLATFORM, html, self.market)
+                    listings = parse_listing(html, self.PLATFORM, self.market)
                     current_count = len(listings)
 
                     logger.info(
@@ -114,7 +115,7 @@ class JustEatTakeawayListingScraper(BaseScraper):
                 # Archive raw HTML
                 self._archive_html(f"listing_{self.market}", html)
 
-                all_listings = parse_listing(self.PLATFORM, html, self.market)
+                all_listings = parse_listing(html, self.PLATFORM, self.market)
             finally:
                 await page.close()
 
@@ -135,7 +136,7 @@ class JustEatTakeawayListingScraper(BaseScraper):
             page = await self._context.new_page()
             try:
                 await self._rate_limit()
-                await page.goto(listing.raw_url, wait_until="networkidle", timeout=30_000)
+                await page.goto(listing.raw_url, wait_until="domcontentloaded", timeout=30_000)
                 await page.wait_for_timeout(2000)
 
                 # Wait for potential lazy content

@@ -35,10 +35,9 @@ default_args = {
 
 def _scrape_doordash(market: str, **kwargs):
     """Task callable: run the DoorDash listing scraper for one market."""
-    import yaml
-    from scrapers.doordash.listing import DoorDashListingScraper
     from processing.normalizer import normalize_listing
-    from storage.db import get_session, PlatformMerchant, MenuItemRow, CrawlRun
+    from scrapers.doordash.listing import DoorDashListingScraper
+    from storage.db import CrawlRun, MenuItemRow, PlatformMerchant, get_session
 
     session = get_session()
     crawl = CrawlRun(platform="doordash", market=market)
@@ -77,7 +76,7 @@ def _scrape_doordash(market: str, **kwargs):
 
             # Perform PostgreSQL Upsert
             from sqlalchemy.dialects.postgresql import insert
-            
+
             stmt = insert(PlatformMerchant).values(
                 platform=pm.platform,
                 platform_id=pm.platform_id,
@@ -95,20 +94,20 @@ def _scrape_doordash(market: str, **kwargs):
                 raw_url=pm.raw_url,
                 scraped_at=datetime.utcnow()
             )
-            
+
             update_dict = {
                 c.name: c
                 for c in stmt.excluded
                 if c.name not in ("id", "platform", "platform_id")
             }
-            
+
             do_update_stmt = stmt.on_conflict_do_update(
                 constraint="platform_merchants_platform_platform_id_key",
                 set_=update_dict
             ).returning(PlatformMerchant.id)
-            
+
             result = session.execute(do_update_stmt)
-            merged_pm_id = result.scalar_one()
+            result.scalar_one()
             session.flush()
 
             # Insert menu items

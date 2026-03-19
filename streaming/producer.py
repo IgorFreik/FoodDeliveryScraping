@@ -1,13 +1,14 @@
 import json
 import logging
 import os
+
 from confluent_kafka import Producer
 
 logger = logging.getLogger(__name__)
 
 class KafkaProducerSingleton:
     _instance = None
-    
+
     @classmethod
     def get_instance(cls):
         if cls._instance is None:

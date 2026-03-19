@@ -3,21 +3,6 @@
 # of zip codes / neighborhoods to iterate over.
 
 markets:
-  - name: "New York City"
-    slug: "nyc"
-    lat: 40.7128
-    lng: -74.0060
-    zips:
-      - "10001"  # Midtown
-      - "10003"  # East Village
-      - "10011"  # Chelsea
-      - "10019"  # Hell's Kitchen
-      - "10029"  # East Harlem
-      - "11201"  # Brooklyn Heights
-      - "11211"  # Williamsburg
-
-
-
   - name: "Amsterdam"
     slug: "amsterdam"
     lat: 52.3676

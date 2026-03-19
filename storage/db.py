@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from datetime import datetime
 
+from geoalchemy2 import Geography
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -24,8 +25,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Session, declarative_base, relationship, sessionmaker
-from geoalchemy2 import Geography
-
 
 # ── Connection ──────────────────────────────────────────────────────
 

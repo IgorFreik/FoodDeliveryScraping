@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from confluent_kafka import Consumer, KafkaError, KafkaException
-from prometheus_client import start_http_server, Counter
+from prometheus_client import Counter, start_http_server
 from sqlalchemy.dialects.postgresql import insert
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -55,7 +55,7 @@ def process_message(msg):
         return
 
     try:
-        listings = parse_listing(platform, html, market)
+        listings = parse_listing(html, platform, market)
     except Exception as exc:
         logger.error("Failed to parse HTML for %s: %s", minio_key, exc)
         return
@@ -81,7 +81,7 @@ def process_message(msg):
                 raw_url=listing.raw_url,
                 raw_s3_key=minio_key,
             )
-            
+
             # --- Inline Data Quality Tracking ---
             if not listing.address:
                 DQ_MISSING_ADDRESS.labels(platform=platform, market=market).inc()
@@ -109,28 +109,28 @@ def process_message(msg):
                 raw_s3_key=pm.raw_s3_key,
                 scraped_at=pm.scraped_at
             )
-            
+
             update_dict = {
                 c.name: c
                 for c in stmt.excluded
                 if c.name not in ('id', 'platform', 'platform_id')
             }
-            
+
             do_update_stmt = stmt.on_conflict_do_update(
                 constraint='platform_merchants_platform_platform_id_key',
                 set_=update_dict
             ).returning(PlatformMerchant.id)
-            
+
             result = session.execute(do_update_stmt)
             merged_pm_id = result.scalar_one()
             session.flush()
-            
+
             if listing.menu_items:
                 # Clear existing menu items and replace
                 session.query(MenuItemRow).filter(
                     MenuItemRow.platform_merchant_id == merged_pm_id
                 ).delete()
-                
+
                 for mi in listing.menu_items:
                     mi_row = MenuItemRow(
                         platform_merchant_id=merged_pm_id,
@@ -139,12 +139,12 @@ def process_message(msg):
                         description=mi.description,
                         category=mi.category,
                     )
-                    
+
                     if mi.price is None or mi.price < 0:
                         DQ_INVALID_PRICE.labels(platform=platform, market=market).inc()
-                        
+
                     session.add(mi_row)
-            
+
             # Archive structured json
             upload_parsed_json(
                 platform=listing.platform,
@@ -170,10 +170,10 @@ def main():
 
     consumer = Consumer(conf)
     consumer.subscribe([KAFKA_TOPIC])
-    
+
     logger.info("Starting Prometheus metrics server on port 8001")
     start_http_server(8001)
-    
+
     logger.info("Kafka consumer started. Listening on %s for topic %s", bootstrap_servers, KAFKA_TOPIC)
 
     try:
@@ -187,10 +187,10 @@ def main():
                 else:
                     logger.error("Consumer error: %s", msg.error())
                     raise KafkaException(msg.error())
-            
+
             process_message(msg)
             consumer.commit(asynchronous=True)
-            
+
     except KeyboardInterrupt:
         logger.info("Consumer interrupted by user.")
     finally:

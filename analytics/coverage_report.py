@@ -1,6 +1,9 @@
-from storage.db import get_session
-from sqlalchemy import text
 from typing import Any
+
+from sqlalchemy import text
+
+from storage.db import get_session
+
 
 def generate_coverage_report() -> dict[str, Any]:
     """Return per-market, per-platform merchant counts."""

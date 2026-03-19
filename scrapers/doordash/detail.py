@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import logging
 
-from scrapers.base import BaseScraper
-from processing.models import MerchantListing, MenuItem
+from processing.models import MerchantListing
 from processing.parser import parse_menu_items_from_html
+from scrapers.base import BaseScraper
 
 logger = logging.getLogger(__name__)
 

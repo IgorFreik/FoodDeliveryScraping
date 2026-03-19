@@ -15,7 +15,6 @@ import unicodedata
 
 from processing.models import MerchantListing
 
-
 # ── Cuisine Taxonomy ────────────────────────────────────────────────
 
 # Map free-text cuisine labels to canonical categories.
@@ -94,9 +93,6 @@ _PRICE_MAP = {
 }
 
 
-# ── Public API ──────────────────────────────────────────────────────
-
-
 def normalize_listing(listing: MerchantListing) -> MerchantListing:
     """
     Apply all normalization steps to a ``MerchantListing`` in-place
@@ -131,15 +127,20 @@ def normalize_name(name: str) -> str:
     name = unicodedata.normalize("NFC", name).strip()
     name = re.sub(r"\s+", " ", name)
 
-    # Remove common platform-injected suffixes
+    # Remove common platform-injected suffixes (incl. Thuisbezorgd/Just Eat)
     name = re.sub(
-        r"\s*[-–—]\s*(order (online|now|delivery)|delivery|menu|doordash|grubhub|uber\s?eats).*$",
+        r"\s*[-–—]\s*(order (online|now|delivery)|delivery|menu|doordash|grubhub|uber\s?eats|thuisbezorgd|just\s?eat).*$",
         "",
         name,
         flags=re.IGNORECASE,
     )
     # Remove parenthetical platform/location names
-    name = re.sub(r"\s*\((doordash|grubhub|uber\s?eats|[^)]{1,30})\)\s*$", "", name, flags=re.IGNORECASE)
+    name = re.sub(
+        r"\s*\((doordash|grubhub|uber\s?eats|thuisbezorgd|just\s?eat|[^)]{1,30})\)\s*$",
+        "",
+        name,
+        flags=re.IGNORECASE,
+    )
 
     # Normalize pipe-like separators: " I " and " l " (standalone) → " | "
     # but only when surrounded by spaces (to avoid matching words like "Indian")
@@ -195,22 +196,28 @@ def normalize_address(address: str) -> str:
     address = unicodedata.normalize("NFC", address).strip()
     address = re.sub(r"\s+", " ", address)
 
-    # Expand common abbreviations
+    # Expand common abbreviations (EN + NL for cross-platform matching)
     replacements = [
         (r"\bSt\b\.?", "Street"),
+        (r"\bStraat\b", "Street"),
         (r"\bAve\b\.?", "Avenue"),
         (r"\bBlvd\b\.?", "Boulevard"),
         (r"\bDr\b\.?", "Drive"),
         (r"\bLn\b\.?", "Lane"),
+        (r"\bLaan\b", "Lane"),
         (r"\bCt\b\.?", "Court"),
         (r"\bPl\b\.?", "Place"),
+        (r"\bPlein\b", "Square"),
         (r"\bRd\b\.?", "Road"),
+        (r"\bWeg\b", "Road"),
         (r"\bSte\b\.?", "Suite"),
         (r"\bApt\b\.?", "Apartment"),
         (r"\bFl\b\.?", "Floor"),
+        # NL postal: normalize "1011 AA" vs "1011AA"
+        (r"\b(\d{4})\s*([A-Z]{2})\b", r"\1 \2"),
     ]
     for pattern, repl in replacements:
-        address = re.sub(pattern, repl, address)
+        address = re.sub(pattern, repl, address, flags=re.IGNORECASE)
 
     return address
 

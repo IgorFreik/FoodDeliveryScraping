@@ -13,13 +13,12 @@ from __future__ import annotations
 import json
 
 from processing.parser import (
+    _safe_float,
+    _safe_int,
     parse_doordash_listing,
     parse_grubhub_listing,
     parse_listing,
-    _safe_float,
-    _safe_int,
 )
-
 
 # ── Helper Fixtures ─────────────────────────────────────────────────
 
@@ -163,5 +162,5 @@ class TestGrubhubParser:
 class TestDispatcher:
     def test_unknown_platform_returns_empty(self):
         # The parser currently logs an error and returns [] instead of raising
-        results = parse_listing("unknown_platform", "<html></html>", "nyc")
+        results = parse_listing("<html></html>", "unknown_platform", "nyc")
         assert results == []
